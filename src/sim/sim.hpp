@@ -1,0 +1,53 @@
+#pragma once
+#include <atomic>
+#include "../types.hpp"
+
+namespace sim {
+
+    class Sim {
+    public:
+
+        Sim();
+        ~Sim();
+        void Run();
+        void Stop() { running.store(false); }
+
+        double get_time() const { return t; }
+        Vec3 get_rocket_pos() const {
+            return { rocket_x.load(), rocket_y.load(), rocket_z.load() };
+        }
+        Quat get_rocket_orientation() const {
+            return { rocket_qw.load(), rocket_qx.load(), rocket_qy.load(), rocket_qz.load() };
+        }
+        Quat get_engine_orientation() const {
+            return { engine_qw.load(), engine_qx.load(), engine_qy.load(), engine_qz.load() };
+        }
+
+        double get_rocket_length() const { return rocket_length; }
+        double get_rocket_cm_dist() const { return rocket_cm_dist; }
+        double get_engine_distance() const { return rocket_engine_dist; }
+        double get_rocket_radius() const { return rocket_radius; }
+
+    private:
+        double t; // sim time
+        std::atomic<bool>   running{true};
+        std::atomic<double> rocket_x{0.0};
+        std::atomic<double> rocket_y{0.0};
+        std::atomic<double> rocket_z{0.0};
+        std::atomic<double> rocket_qw{1.0};
+        std::atomic<double> rocket_qx{0.0};
+        std::atomic<double> rocket_qy{0.0};
+        std::atomic<double> rocket_qz{0.0};
+        std::atomic<double> engine_qw{1.0};
+        std::atomic<double> engine_qx{0.0};
+        std::atomic<double> engine_qy{0.0};
+        std::atomic<double> engine_qz{0.0};
+
+        double rocket_length = 11.25;
+        double rocket_cm_dist = 5.0;
+        double rocket_engine_dist = 10.5;
+        double rocket_radius = 0.5;
+
+    };
+
+}
