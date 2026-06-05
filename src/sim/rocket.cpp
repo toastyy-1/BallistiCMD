@@ -224,3 +224,40 @@ void Rocket::set_engine_orientation(Quat orientation) {
     double s = std::sin(half_max) / sin_half;
     q_engine = {std::cos(half_max), orientation.x * s, orientation.y * s, orientation.z * s};
 }
+
+void Rocket::set_start(double latitude, double longitude) {
+    // conv to degrees
+    latitude *= M_PI / 180.0;
+    longitude *= M_PI / 180.0;
+
+    // determine absolute position needed relative to lat and long
+    Vec3 pos = {
+        .x = EARTH_RADIUS_M * cos(latitude) * cos(longitude),
+        .y = EARTH_RADIUS_M * cos(latitude) * sin(longitude),
+        .z = EARTH_RADIUS_M * sin(latitude)
+    };
+
+    // set the position of the rocket to that asolute position
+    set_pos(pos);
+
+    // determine the necessary orientation to achive normal "up" position from surface
+    Vec3 unit_vec_from_center = {
+        .x = cos(latitude) * cos(longitude),
+        .y = cos(latitude) * sin(longitude),
+        .z = sin(latitude)
+    };
+    Vec3 up = {0, 0, 1}; // since +z is up
+    Vec3 rotation_axis = up.cross(unit_vec_from_center);
+    Vec3 rot_axis_u = rotation_axis / rotation_axis.norm();
+
+    double half_theta = acos(sin(latitude)) / 2;
+    Quat q = {
+        .w = cos(half_theta),
+        .x = sin(half_theta) * rot_axis_u.x,
+        .y = sin(half_theta) * rot_axis_u.y,
+        .z = sin(half_theta) * rot_axis_u.z
+    };
+    
+    // set the oritnetaion of the rocket to normal the surface
+    set_orientation(q);
+}

@@ -24,8 +24,8 @@ class Rocket {
     double get_drag_coeff() const { return Cd; }
 
     // setters (should only be used on setup)
-    void set_pos(const Vec3& pos) { r = pos; }
-    void set_orientation(const Quat& orient) { q_rocket = orient; }
+    void set_pos(const Vec3& pos) { r = pos; } // set absolute position
+    void set_orientation(const Quat& orient) { q_rocket = orient; } // set absolute orientation
     void set_dry_mass(double mass) { m_dry = mass; }
     void set_fuel_mass(double mass) { m_fuel = mass; }
     void set_mass_flow_rate(double mfr) { m_flow_rate = mfr; }
@@ -39,6 +39,7 @@ class Rocket {
 
 
     // simulation things
+    void set_start(double latitude, double longitude); // used to set the starting position of the rocket (should over over setting absolute position and orientation)
     void update_dynamics();
     void update_rotation();
     void update_mass();
