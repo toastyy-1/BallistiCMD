@@ -77,6 +77,17 @@ namespace sim {
             engine_qy.store(qe.y);
             engine_qz.store(qe.z);
 
+            // store kinematics the IMU samples
+            Vec3 a = rocket.get_acc();
+            rocket_ax.store(a.x);
+            rocket_ay.store(a.y);
+            rocket_az.store(a.z);
+            Vec3 wv = rocket.get_ang_vel();
+            rocket_wx.store(wv.x);
+            rocket_wy.store(wv.y);
+            rocket_wz.store(wv.z);
+            sim_time.store(t);
+
             std::this_thread::sleep_for(std::chrono::duration<double>(0.01));
         }
     }

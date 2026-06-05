@@ -1,6 +1,6 @@
 CXX      := g++
 CXXFLAGS := -std=c++17 -Wall -Isrc -pthread
-SRCS     := src/main.cpp src/renderer/renderer.cpp src/sim/sim.cpp src/sim/rocket.cpp
+SRCS     := src/main.cpp src/renderer/renderer.cpp src/sim/sim.cpp src/sim/rocket.cpp src/fc/fc.cpp
 TARGET   := program
 
 ifeq ($(OS),Windows_NT)
