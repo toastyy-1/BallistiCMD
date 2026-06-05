@@ -19,6 +19,7 @@ class Rocket {
     Quat get_orientation() const { return q_rocket; }
     Quat get_engine_orientation() const { return q_engine; }
     double get_mass() const { return m_dry + m_fuel; }
+    double get_fuel_mass() const { return m_fuel; }
     double get_inertia() const { return I; }
     double get_drag_coeff() const { return Cd; }
 

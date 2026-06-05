@@ -3,8 +3,24 @@
 #include <raymath.h>
 #include <rlgl.h>
 #include <math.h>
+#include <algorithm>
 
 namespace renderer {
+
+namespace {
+
+// Rotate vector v by quaternion q (body -> ECI), Rodrigues form.
+Vec3 qrot(const Quat& q, const Vec3& v) {
+    Vec3 qv {q.x, q.y, q.z};
+    Vec3 t = qv.cross(v);
+    return v + t * (2.0 * q.w) + qv.cross(t) * 2.0;
+}
+
+double clampd(double v, double lo, double hi) {
+    return std::max(lo, std::min(hi, v));
+}
+
+} // namespace
 
 Renderer::Renderer(const sim::Sim& s) : sim_(s) {
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
@@ -239,9 +255,112 @@ void Renderer::DrawFrame(const Camera3D& cam) {
     DrawPredictedTrajectory();
     DrawRocket();
     EndMode3D();
-    t = sim_.get_time();
-    DrawText(TextFormat("T+  %.1f s",  (float)t), 10, 10, 20, WHITE);
+    DrawTelemetry();
     EndDrawing();
+}
+
+void Renderer::DrawTelemetry() const {
+    // --- gather raw state (all ECI, SI units) ---
+    Vec3 r = sim_.get_rocket_pos();
+    Vec3 v = sim_.get_rocket_vel();
+    Vec3 a = sim_.get_rocket_acc();
+    Vec3 w = sim_.get_rocket_ang_vel();
+    Quat qr = sim_.get_rocket_orientation();
+    Quat qe = sim_.get_engine_orientation();
+    double t    = sim_.get_time();
+    double mass = sim_.get_rocket_mass();
+    double fuel = sim_.get_rocket_fuel();
+
+    // --- position: geodetic-ish lat/lon and altitude above the ellipsoid ---
+    double rmag = r.norm();
+    Vec3   up   = r / rmag;                       // local vertical (geocentric)
+    double lat  = std::asin(clampd(r.z / rmag, -1.0, 1.0));
+    double lon  = std::atan2(r.y, r.x);
+    double cl = std::cos(lat), sl = std::sin(lat);
+    double ae = EARTH_RADIUS_M, be = EARTH_RADIUS_POLAR_M;
+    double Rsurf = (ae * be) / std::sqrt(be*be*cl*cl + ae*ae*sl*sl);
+    double alt   = rmag - Rsurf;
+
+    // --- local ENU frame for headings ---
+    Vec3 zhat { 0, 0, 1 };
+    Vec3 east  = zhat.cross(up);
+    east = (east.norm() > 1e-9) ? east.normalized() : Vec3{1,0,0};
+    Vec3 north = up.cross(east);
+
+    // --- velocity, decomposed into the local vertical/horizontal frame ---
+    double speed = v.norm();
+    double vvert = v.dot(up);                      // climb rate
+    Vec3   vhor  = v - up * vvert;
+    double vhorm = vhor.norm();
+    double fpa   = std::atan2(vvert, vhorm) * RAD_TO_DEG;
+    double hdg   = std::atan2(vhor.dot(east), vhor.dot(north)) * RAD_TO_DEG;
+    if (hdg < 0) hdg += 360.0;
+
+    // --- acceleration ---
+    double amag   = a.norm();
+    double gforce = amag / g0;
+
+    // --- attitude ---
+    Vec3   nose  = qrot(qr, {0, 0, 1});            // body +Z (nose) in ECI
+    double pitch = std::asin(clampd(nose.dot(up), -1.0, 1.0)) * RAD_TO_DEG;  // above horizon
+    double gimbal = 2.0 * std::acos(clampd(qe.w, -1.0, 1.0)) * RAD_TO_DEG;   // engine deflection
+    Vec3   wdeg  = w * RAD_TO_DEG;                 // body angular rates
+
+    // --- layout ---
+    // Panel size is derived from how many headers/rows we draw below; keep these
+    // counts in sync with the sections so the box always wraps the text exactly.
+    const int x = 10, valx = 150;
+    const int fs = 16, lh = 18, hh = lh + 6;  // row height, header block height
+    const int nHeaders = 6, nRows = 19;
+    int y = 12;
+    const int panelW = 300;
+    const int panelH = y + nHeaders * hh + nRows * lh + 8;
+    DrawRectangle(0, 0, panelW, panelH, Fade(BLACK, 0.55f));
+    DrawRectangleLines(0, 0, panelW, panelH, Fade(SKYBLUE, 0.3f));
+
+    auto header = [&](const char* s) {
+        y += 4;
+        DrawText(s, x, y, fs, SKYBLUE);
+        y += lh + 2;
+    };
+    auto row = [&](const char* label, const char* val, Color c) {
+        DrawText(label, x, y, fs, GRAY);
+        DrawText(val, valx, y, fs, c);
+        y += lh;
+    };
+
+    header("MISSION");
+    row("MET",        TextFormat("T+ %7.1f s", t),       WHITE);
+
+    header("VEHICLE");
+    row("Mass",       TextFormat("%8.1f kg", mass),      WHITE);
+    row("Propellant", TextFormat("%8.1f kg", fuel),      fuel < 50.0 ? RED : GREEN);
+
+    header("POSITION");
+    row("Altitude",   TextFormat("%9.2f km", alt * M_TO_KM), GREEN);
+    row("Latitude",   TextFormat("%8.3f deg", lat * RAD_TO_DEG), WHITE);
+    row("Longitude",  TextFormat("%8.3f deg", lon * RAD_TO_DEG), WHITE);
+    row("Radius",     TextFormat("%9.2f km", rmag * M_TO_KM), WHITE);
+
+    header("VELOCITY");
+    row("Speed",      TextFormat("%8.1f m/s", speed),     GREEN);
+    row("Vertical",   TextFormat("%+8.1f m/s", vvert),    WHITE);
+    row("Horizontal", TextFormat("%8.1f m/s", vhorm),     WHITE);
+    row("Flight path",TextFormat("%+8.2f deg", fpa),      WHITE);
+    row("Heading",    TextFormat("%8.1f deg", hdg),       WHITE);
+
+    header("ACCELERATION");
+    row("Magnitude",  TextFormat("%8.2f m/s2", amag),     WHITE);
+    row("G-load",     TextFormat("%8.2f g", gforce),      gforce > 6.0 ? RED : GREEN);
+
+    header("ATTITUDE");
+    row("Pitch",      TextFormat("%+8.2f deg", pitch),    WHITE);
+    row("Gimbal",     TextFormat("%8.2f deg", gimbal),    gimbal > 5.0 ? ORANGE : WHITE);
+    row("Roll rate",  TextFormat("%+8.2f d/s", wdeg.x),   WHITE);
+    row("Pitch rate", TextFormat("%+8.2f d/s", wdeg.y),   WHITE);
+    row("Yaw rate",   TextFormat("%+8.2f d/s", wdeg.z),   WHITE);
+
+    DrawFPS(panelW + 10, 12);
 }
 
 }

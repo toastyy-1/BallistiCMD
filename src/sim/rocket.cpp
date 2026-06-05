@@ -43,6 +43,8 @@ Vec3 Rocket::nose_direction_eci() {
 }
 
 void Rocket::update_dynamics() {
+    // rocket mass
+    double m = m_dry + m_fuel;
 
     // time step for the simulation
     double dt = TIME_STEP;
@@ -51,7 +53,7 @@ void Rocket::update_dynamics() {
     double r_norm = r.norm();
 
     // thrust acceleration
-    Vec3 a_thrust = nose_direction_eci() * (calculate_engine_thrust_component() / m_dry);
+    Vec3 a_thrust = nose_direction_eci() * (calculate_engine_thrust_component() / m);
 
     ///////////////////////////////////////////////////////////////////////////////////////////////
     // RK4 integration                                                                           //
@@ -179,9 +181,10 @@ void Rocket::update_rotation() {
 void Rocket::update_mass() {
     double per = current_thrust / max_thrust;
     if (m_fuel > 0) {
-        double sub = per * m_flow_rate;
+        double sub = per * m_flow_rate * TIME_STEP;
         if (sub > m_fuel) {
             m_fuel = 0;
+            current_thrust = 0;
         }
         else m_fuel -= sub;
     }
@@ -189,7 +192,9 @@ void Rocket::update_mass() {
 
 void Rocket::activate_engine(double throttle_percent) {
     double throttle = throttle_percent / 100.0;
-    current_thrust = max_thrust * throttle;
+    if (m_fuel != 0) {
+        current_thrust = max_thrust * throttle;
+    }
 }
 
 void Rocket::set_engine_orientation(Quat orientation) {

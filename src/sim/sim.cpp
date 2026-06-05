@@ -16,8 +16,8 @@ namespace sim {
 
     void Sim::Run() {
         rocket.set_pos({0, 0, EARTH_RADIUS_M});
-        rocket.set_dry_mass(5900.0);
-        rocket.set_fuel_mass(1000.0);
+        rocket.set_dry_mass(3000.0);
+        rocket.set_fuel_mass(3900.0);
         rocket.set_mass_flow_rate(53);
         rocket.set_nose_to_engine_length(rocket_length);
         rocket.set_CM_dist(rocket_cm_dist);
@@ -79,6 +79,8 @@ namespace sim {
             rocket_wx.store(wv.x);
             rocket_wy.store(wv.y);
             rocket_wz.store(wv.z);
+            rocket_mass.store(rocket.get_mass());
+            rocket_fuel.store(rocket.get_fuel_mass());
             sim_time.store(t);
 
             std::this_thread::sleep_for(std::chrono::duration<double>(0.01));

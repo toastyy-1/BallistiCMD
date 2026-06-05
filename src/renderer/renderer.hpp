@@ -21,6 +21,7 @@ private:
     void DrawBodyAxes() const;
     void DrawRocket() const;
     void DrawPredictedTrajectory() const;
+    void DrawTelemetry() const;
 
     // The scene is shifted so this point (the rocket's ECI position) sits at the
     // world origin, which keeps the rocket geometry inside the precision sweet
@@ -33,7 +34,6 @@ private:
     float yaw   = 0.0f;
     float pitch = 0.3f;
     float dist  = EARTH_RADIUS_KM * 3.0f;
-    double t    = 0.0;
 };
 
 }

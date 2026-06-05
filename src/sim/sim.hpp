@@ -35,6 +35,8 @@ namespace sim {
         Vec3 get_rocket_ang_vel() const {
             return { rocket_wx.load(), rocket_wy.load(), rocket_wz.load() };
         }
+        double get_rocket_mass() const { return rocket_mass.load(); }
+        double get_rocket_fuel() const { return rocket_fuel.load(); }
 
         double get_rocket_length() const { return rocket_length; }
         double get_rocket_cm_dist() const { return rocket_cm_dist; }
@@ -64,6 +66,8 @@ namespace sim {
         std::atomic<double> rocket_wx{0.0};
         std::atomic<double> rocket_wy{0.0};
         std::atomic<double> rocket_wz{0.0};
+        std::atomic<double> rocket_mass{0.0};
+        std::atomic<double> rocket_fuel{0.0};
         std::atomic<double> sim_time{0.0};
 
         double rocket_length = 11.25;
