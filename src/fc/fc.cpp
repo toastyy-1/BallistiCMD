@@ -109,7 +109,16 @@ int flight_controller(sim::Sim& sim) {
         case ARMED:
             break;
         case POWERED_ASCENT: {
-            r.activate_engine(100);
+            static bool engine_lit = false;
+            if (!engine_lit) {
+                r.light_engine();
+                engine_lit = true;
+            }
+
+            static bool start = ds.time;
+            if (ds.time - start > 130) {
+                r.advance_stage();
+            }
 
             const double turn_time = 3.0;
             static double turn_time_start = ds.time;

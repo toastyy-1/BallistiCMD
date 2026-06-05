@@ -7,6 +7,7 @@
 #include <chrono>
 #include "constants.hpp"
 
+
 namespace sim {
 
     Sim::Sim() {
@@ -14,19 +15,68 @@ namespace sim {
     }
     Sim::~Sim() {}
 
-    void Sim::Run() {
+    void Sim::configure_rocket() {
         rocket.set_start(35.9606, -83.9207);
-        rocket.set_dry_mass(3000.0);
-        rocket.set_fuel_mass(3900.0);
-        rocket.set_mass_flow_rate(53);
-        rocket.set_nose_to_engine_length(rocket_length);
-        rocket.set_CM_dist(rocket_cm_dist);
-        rocket.set_moment_of_inertia(62000.0);
-        rocket.set_drag_coeff(0.3);
-        rocket.set_max_thrust(131000.0);
-        rocket.set_engine_dist(rocket_engine_dist);
-        rocket.set_engine_gimball_range(5.0);
-        rocket.set_engine_orientation({1, 0, 0, 0});
+        rocket.set_radius(rocket_radius);
+
+        Stage s1 = {
+            .id = 1,
+            .m_dry = 2292.0,
+            .m_fuel = 20780.0,
+            .m_flow_rate = 339.0,
+            .tip_to_end_length = 7.49,
+            .CM_dist = 3.75,
+            .max_thrust = 792000.0,
+            .engine_distance = 7.49,
+            .engine_gimball_range = 5.0
+        };
+
+        Stage s2 = {
+            .id = 2,
+            .m_dry = 1107.0,
+            .m_fuel = 6170.0,
+            .m_flow_rate = 93.5,
+            .tip_to_end_length = 4.12,
+            .CM_dist = 2.06,
+            .max_thrust = 267700.0,
+            .engine_distance = 4.12,
+            .engine_gimball_range = 5.0
+        };
+
+        Stage s3 = {
+            .id = 3,
+            .m_dry = 545.0,
+            .m_fuel = 3306.0,
+            .m_flow_rate = 54.0,
+            .tip_to_end_length = 2.34,
+            .CM_dist = 1.17,
+            .max_thrust = 152000.0,
+            .engine_distance = 2.34,
+            .engine_gimball_range = 5.0
+        };
+
+        Stage payload = {
+            .id = 4,
+            .m_dry = 1150.0,
+            .m_fuel = 0.0,
+            .m_flow_rate = 0.0,
+            .tip_to_end_length = 1.0,
+            .CM_dist = 0.5,
+            .max_thrust = 0.0,
+            .engine_distance = 1.0,
+            .engine_gimball_range = 0.0
+        };
+
+        rocket.set_stage(1, s1);
+        rocket.set_stage(2, s2);
+        rocket.set_stage(3, s3);
+        rocket.set_stage(4, payload);
+    }
+
+    void Sim::Run() {
+
+        // configure the rocket for starting settings
+        configure_rocket();
 
         while (running.load()) {
 
@@ -39,49 +89,12 @@ namespace sim {
             */
 
             // update the position, orientation, and mass of the rocket
+            rocket.update_mass();
             rocket.update_dynamics();
             rocket.update_rotation();
-            rocket.update_mass();
 
             // increment time step
             t += TIME_STEP;
-
-            ///////////////////////////////////////////////////////////////////////////////////////////////
-            // pass shit to renderer and fc                                                              //
-            ///////////////////////////////////////////////////////////////////////////////////////////////
-
-            // store the rocket's position so that the renderer can access it
-            Vec3 p = rocket.get_pos();
-            rocket_x.store(p.x);
-            rocket_y.store(p.y);
-            rocket_z.store(p.z);
-            Vec3 vel = rocket.get_vel();
-            rocket_vx.store(vel.x);
-            rocket_vy.store(vel.y);
-            rocket_vz.store(vel.z);
-            Quat q = rocket.get_orientation();
-            rocket_qw.store(q.w);
-            rocket_qx.store(q.x);
-            rocket_qy.store(q.y);
-            rocket_qz.store(q.z);
-            Quat qe = rocket.get_engine_orientation();
-            engine_qw.store(qe.w);
-            engine_qx.store(qe.x);
-            engine_qy.store(qe.y);
-            engine_qz.store(qe.z);
-
-            // store kinematics the IMU samples
-            Vec3 a = rocket.get_acc();
-            rocket_ax.store(a.x);
-            rocket_ay.store(a.y);
-            rocket_az.store(a.z);
-            Vec3 wv = rocket.get_ang_vel();
-            rocket_wx.store(wv.x);
-            rocket_wy.store(wv.y);
-            rocket_wz.store(wv.z);
-            rocket_mass.store(rocket.get_mass());
-            rocket_fuel.store(rocket.get_fuel_mass());
-            sim_time.store(t);
 
             std::this_thread::sleep_for(std::chrono::duration<double>(0.01));
         }

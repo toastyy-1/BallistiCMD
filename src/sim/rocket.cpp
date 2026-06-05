@@ -11,13 +11,33 @@ Rocket::~Rocket() {
 }
 
 /**
+ * advances the stage of the rocket to the next one
+ */
+bool Rocket::advance_stage() {
+    if (active_idx + 1 < NUM_STAGES) {
+        active_idx++;
+        return true;
+    }
+    return false;
+}
+
+/**
+ * control lighting the engine on the current active stage
+ */
+void Rocket::light_engine() {
+    if (active().m_fuel > 0) {
+        active().thrust = active().max_thrust;
+    }
+}
+
+/**
  * calculates the component of the engine's thrust that contributes to direct forward motion
  * based on its gimbal angle
  * @return forward thrust in newtons relative to body frame
  */
 double Rocket::calculate_engine_thrust_component() {
     double gimbal_angle = 2.0 * std::acos(q_engine.w);
-    return current_thrust * std::cos(gimbal_angle);
+    return active().thrust * std::cos(gimbal_angle);
 }
 
 /**
@@ -27,7 +47,7 @@ double Rocket::calculate_engine_thrust_component() {
  */
 double Rocket::calculate_engine_rotational_component() {
     double gimbal_angle = 2.0 * std::acos(q_engine.w);
-    return current_thrust * std::sin(gimbal_angle);
+    return active().thrust * std::sin(gimbal_angle);
 }
 
 /**
@@ -44,7 +64,7 @@ Vec3 Rocket::nose_direction_eci() {
 
 void Rocket::update_dynamics() {
     // rocket mass
-    double m = m_dry + m_fuel;
+    double m = m_current;
 
     // time step for the simulation
     double dt = TIME_STEP;
@@ -143,18 +163,26 @@ void Rocket::update_rotation() {
     Vec3 t = q_vec.cross(nose_body);
     Vec3 thrust_dir_body = nose_body + t * (2.0 * q_engine.w) + q_vec.cross(t) * 2.0;
 
-    // level arm
-    Vec3 r_engine = {0, 0, -(engine_distance - CM_dist)};
+    // lever arm from the combined CM to the engine, along the body axis
+    double s_engine = active().tip_to_end_length - active().engine_distance;
+    Vec3 r_engine = {0, 0, s_engine - z_cm};
 
     // torque in body frame
-    net_torque += r_engine.cross(thrust_dir_body * current_thrust);
+    net_torque += r_engine.cross(thrust_dir_body * active().thrust);
 
 
     ////////////////////////////////////
     // apply torque to orientation
     ////////////////////////////////////
-    // angular acceleration and velocity (body frame)
-    Vec3 ang_a = net_torque / I;
+    // Euler's rigid-body equation in the body frame: I·w_dot = tau - w x (I·w).
+    // I is diagonal here (axisymmetric body), so each axis divides through.
+    Vec3 Iw   = {I_body.x * w.x, I_body.y * w.y, I_body.z * w.z};
+    Vec3 gyro = w.cross(Iw);
+    Vec3 ang_a = {
+        (net_torque.x - gyro.x) / I_body.x,
+        (net_torque.y - gyro.y) / I_body.y,
+        (net_torque.z - gyro.z) / I_body.z,
+    };
     w += ang_a * dt;
 
     // modify quaternion orientation from change
@@ -179,22 +207,41 @@ void Rocket::update_rotation() {
 
 // updates the fuel mass based on the current throttle and mass flow rate
 void Rocket::update_mass() {
-    double per = current_thrust / max_thrust;
-    if (m_fuel > 0) {
-        double sub = per * m_flow_rate * TIME_STEP;
-        if (sub > m_fuel) {
-            m_fuel = 0;
-            current_thrust = 0;
+    // update per-stage mass
+    Stage& s = active();
+    if (s.m_fuel > 0 && s.thrust > 0) {
+        double sub = s.m_flow_rate * TIME_STEP;
+        if (sub > s.m_fuel) {
+            s.m_fuel = 0;
+            s.thrust = 0;
         }
-        else m_fuel -= sub;
+        else s.m_fuel -= sub;
     }
-}
 
-void Rocket::activate_engine(double throttle_percent) {
-    double throttle = throttle_percent / 100.0;
-    if (m_fuel != 0) {
-        current_thrust = max_thrust * throttle;
+    double M = 0, M_f = 0, m_cm = 0, base = 0;
+    for (int i = active_idx; i < NUM_STAGES; i++) {
+        const Stage& st = stages[i];
+        double m = st.m_dry + st.m_fuel;
+        M += m;
+        M_f += st.m_fuel;
+        m_cm += m * (base + st.tip_to_end_length - st.CM_dist);
+        base += st.tip_to_end_length;
     }
+    m_current = M;
+    m_fuel_current = M_f;
+    z_cm = m_cm / M;
+
+    // also adjust moment using assumption that each stage is uniform cylinder
+    double R2 = radius * radius, I_trans = 0;
+    base = 0;
+    for (int i = active_idx; i < NUM_STAGES; i++) {
+        const Stage& st = stages[i];
+        double m = st.m_dry + st.m_fuel, L = st.tip_to_end_length;
+        double d = (base + L - st.CM_dist) - z_cm;
+        I_trans += (1.0 / 12.0) * m * (3.0 * R2 + L * L) + m * d * d;
+        base += L;
+    }
+    I_body = { I_trans, I_trans, 0.5 * R2 * M };
 }
 
 void Rocket::set_engine_orientation(Quat orientation) {
@@ -207,7 +254,7 @@ void Rocket::set_engine_orientation(Quat orientation) {
     orientation.z /= norm;
 
     double angle = 2.0 * std::acos(std::max(-1.0, std::min(1.0, orientation.w)));
-    double max_angle = engine_gimball_range * M_PI / 180.0;
+    double max_angle = active().engine_gimball_range * M_PI / 180.0;
 
     if (angle <= max_angle) {
         q_engine = orientation;
@@ -223,6 +270,13 @@ void Rocket::set_engine_orientation(Quat orientation) {
     double half_max = max_angle / 2.0;
     double s = std::sin(half_max) / sin_half;
     q_engine = {std::cos(half_max), orientation.x * s, orientation.y * s, orientation.z * s};
+}
+
+void Rocket::set_stage(int stage_num, const Stage& cfg) {
+    if (stage_num >= 1 && stage_num <= NUM_STAGES) {
+        stages[stage_num - 1] = cfg;
+        stages[stage_num - 1].id = stage_num;
+    }
 }
 
 void Rocket::set_start(double latitude, double longitude) {
