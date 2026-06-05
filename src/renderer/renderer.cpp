@@ -79,10 +79,16 @@ Renderer::Renderer(const sim::Sim& s) : sim_(s) {
 
     // Equirectangular map: swap the generated UVs so it wraps cleanly, then spin
     // the model -90 deg about X so its poles sit on the ECI Z axis.
+    // The texture's prime meridian is mounted a few degrees off the ECI +X axis,
+    // so geography lands east/west of the rocket's true longitude. Shifting every
+    // column by this fraction spins the map around the pole to line it up. Pure
+    // longitude offset (no U flip, so the map keeps its correct handedness);
+    // fine-tune against a sharp coastline if it's still a touch off.
+    const float kLonOffset = 12.0f / 360.0f;  // degrees east -> UV fraction
     Mesh mesh = GenMeshSphere(EARTH_RADIUS_KM, 128, 128);
     for (int i = 0; i < mesh.vertexCount; i++) {
         float u = mesh.texcoords[i*2 + 0];
-        mesh.texcoords[i*2 + 0] = mesh.texcoords[i*2 + 1];
+        mesh.texcoords[i*2 + 0] = mesh.texcoords[i*2 + 1] + kLonOffset;
         mesh.texcoords[i*2 + 1] = u;
     }
     UpdateMeshBuffer(mesh, 1, mesh.texcoords, mesh.vertexCount * 2 * sizeof(float), 0);

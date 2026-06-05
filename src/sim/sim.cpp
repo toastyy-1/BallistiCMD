@@ -15,7 +15,7 @@ namespace sim {
     Sim::~Sim() {}
 
     void Sim::Run() {
-        rocket.set_start(35.9606, 83.9207);
+        rocket.set_start(35.9606, -83.9207);
         rocket.set_dry_mass(3000.0);
         rocket.set_fuel_mass(3900.0);
         rocket.set_mass_flow_rate(53);
