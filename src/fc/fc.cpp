@@ -32,7 +32,7 @@ enum mission_stage {
     POWERED_ASCENT,
     UNPOWERED_ASCENT,
     STAGE_SEPARATION,
-    DECENT
+    DESCENT
 };
 
 // holds the states of controls for the rocket
@@ -51,7 +51,7 @@ static const char* stage_name(mission_stage s) {
         case POWERED_ASCENT:   return "POWERED ASCENT";
         case UNPOWERED_ASCENT: return "UNPOWERED ASCENT";
         case STAGE_SEPARATION: return "STAGE SEP";
-        case DECENT:           return "DESCENT";
+        case DESCENT:           return "DESCENT";
         default:               return "UNKNOWN";
     }
 }
@@ -112,14 +112,27 @@ int flight_controller(sim::Sim& sim) {
             break;
         case ARMED:
             break;
-        case POWERED_ASCENT:
+        case POWERED_ASCENT: {
             r.activate_engine(100);
+
+            const double turn_time = 3.0;
+            static double turn_time_start = ds.time;
+            if ((ds.time - turn_time_start) < turn_time) {
+                double half = (0.3 * M_PI / 180.0) / 2.0;
+                r.set_engine_orientation( {std::cos(half), 0.0, std::sin(half), 0.0} );
+            }
+            else if ((ds.time - turn_time_start) < 2.0 * turn_time) {
+                double half = (-0.3 * M_PI / 180.0) / 2.0;
+                r.set_engine_orientation( {std::cos(half), 0.0, std::sin(half), 0.0} );
+            }
+            else r.set_engine_orientation({1, 0, 0, 0});
             break;
+        }
         case UNPOWERED_ASCENT:
             break;
         case STAGE_SEPARATION:
             break;
-        case DECENT:
+        case DESCENT:
             break;
         }
 
