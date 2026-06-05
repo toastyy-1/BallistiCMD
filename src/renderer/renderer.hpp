@@ -15,6 +15,7 @@ public:
 
 private:
     void HandleInput();
+    void UpdateThrustLevel();
     Camera3D BuildCamera() const;
     void DrawFrame(const Camera3D& cam);
     void DrawEarth(const Camera3D& cam, Vector3 earthC);
@@ -50,6 +51,11 @@ private:
     float yaw   = 0.0f;
     float pitch = 0.3f;
     float dist  = 0.05f;  // 50 m: framed on the rocket; scroll out to see the Earth
+
+    // Exhaust plume state. The sim exposes no "firing" flag, so we infer it from
+    // propellant being burned and smooth it into a level that drives the plume.
+    float  thrust_   = 0.0f;   // [0,1], ramps with the motor
+    double prevFuel_ = -1.0;   // previous propellant sample (-1 = none yet)
 };
 
 }

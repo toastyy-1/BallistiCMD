@@ -107,8 +107,20 @@ void Renderer::Run() {
         HandleInput();
         // Sample once per frame so camera, axes, rocket, and Earth all agree.
         p_ref_eci_ = sim_.get_rocket_pos();
+        UpdateThrustLevel();
         DrawFrame(BuildCamera());
     }
+}
+
+void Renderer::UpdateThrustLevel() {
+    // Infer engine firing from propellant draw-down: any drop between frames
+    // means the motor is lit. Ease the on/off into a level so the plume fades
+    // in and out instead of popping.
+    double fuel   = sim_.get_rocket_fuel();
+    bool   firing = prevFuel_ >= 0.0 && fuel < prevFuel_ - 1e-9 && fuel > 0.0;
+    prevFuel_     = fuel;
+    float k = fminf(1.0f, GetFrameTime() * 12.0f);
+    thrust_ += ((firing ? 1.0f : 0.0f) - thrust_) * k;
 }
 
 void Renderer::HandleInput() {
@@ -226,8 +238,31 @@ void Renderer::DrawRocket() const {
 
     // Gimbaled engine bell: thrust = q_rocket * (q_engine * +Z); bell points opposite.
     Vec3    thrust_eci = qrot(qr, qrot(qe, {0, 0, 1}));
-    Vector3 bellW      = ToView(along(eng_dist) - thrust_eci * 1.5);
-    DrawCylinderEx(engineW, bellW, radiusW * 0.4f, radiusW * 1.15f, kSides, kBell);
+    Vec3    nozzle     = along(eng_dist) - thrust_eci * 1.5;     // bell exit, ECI
+    DrawCylinderEx(engineW, ToView(nozzle), radiusW * 0.4f, radiusW * 1.15f, kSides, kBell);
+
+    // Exhaust plume: nested additive cones streaming out the nozzle along the
+    // exhaust (-thrust) direction, with a flicker so it looks alive. Drawn last,
+    // depth-test on but depth-write off so the layers glow through each other.
+    if (thrust_ > 0.02f) {
+        float t     = (float)GetTime();
+        float flick = 0.82f + 0.12f*sinf(t*46.0f) + 0.06f*sinf(t*71.0f + 1.7f);
+        double L    = length * 0.8 * thrust_ * flick;           // plume length, metres
+        auto cone = [&](double r0, double len, Color c) {
+            c.a = (unsigned char)(c.a * thrust_);
+            DrawCylinderEx(ToView(nozzle), ToView(nozzle - thrust_eci * len),
+                           float(r0 * M_TO_KM), 0.0f, kSides, c);
+        };
+        rlDisableDepthMask();
+        BeginBlendMode(BLEND_ADDITIVE);
+        cone(radius * 1.5,  L * 1.25, { 180,  70, 20,  90 });   // outer haze
+        cone(radius * 1.0,  L,        { 255, 140, 40, 140 });   // flame body
+        cone(radius * 0.55, L * 0.6,  { 255, 235, 180, 210 });  // white-hot core
+        DrawSphere(ToView(nozzle), radiusW * (0.7f + 0.2f*flick),
+                   { 255, 190, 90, (unsigned char)(150 * thrust_) });  // nozzle glow
+        EndBlendMode();
+        rlEnableDepthMask();
+    }
 }
 
 void Renderer::DrawPredictedTrajectory() const {
