@@ -44,20 +44,19 @@ struct control_states {
 // helper functions                                                                          //
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-static const char* stage_name(mission_stage s) {
-    switch (s) {
-        case STANDBY:          return "STANDBY";
-        case ARMED:            return "ARMED";
-        case POWERED_ASCENT:   return "POWERED ASCENT";
-        case UNPOWERED_ASCENT: return "UNPOWERED ASCENT";
-        case STAGE_SEPARATION: return "STAGE SEP";
-        case DESCENT:           return "DESCENT";
-        default:               return "UNKNOWN";
-    }
-}
-
 void print_telemetry(const data_store& ds, const control_states& cs) {
-    std::cout << "\033[1;31m[" << "\033[1;33m" << stage_name(cs.stage)
+    const char* stage;
+    switch (cs.stage) {
+        case STANDBY:          stage = "STANDBY";
+        case ARMED:            stage = "ARMED";
+        case POWERED_ASCENT:   stage = "POWERED ASCENT";
+        case UNPOWERED_ASCENT: stage = "UNPOWERED ASCENT";
+        case STAGE_SEPARATION: stage = "STAGE SEP";
+        case DESCENT:          stage = "DESCENT";
+        default:               stage = "UNKNOWN";
+    }
+
+    std::cout << "\033[1;31m[" << "\033[1;33m" << stage
               << "\033[1;31m]"
               << "\033[0;37m  T+" << "\033[1;37m" << std::fixed << std::setprecision(1) << ds.time << "s"
               << "\033[0;37m  acc=" << "\033[1;36m" << std::setprecision(2) << ds.a.norm() << "m/s²"
