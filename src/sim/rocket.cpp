@@ -174,8 +174,6 @@ void Rocket::update_rotation() {
     ////////////////////////////////////
     // apply torque to orientation
     ////////////////////////////////////
-    // Euler's rigid-body equation in the body frame: I·w_dot = tau - w x (I·w).
-    // I is diagonal here (axisymmetric body), so each axis divides through.
     Vec3 Iw   = {I_body.x * w.x, I_body.y * w.y, I_body.z * w.z};
     Vec3 gyro = w.cross(Iw);
     Vec3 ang_a = {
