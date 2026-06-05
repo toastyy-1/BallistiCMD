@@ -1,6 +1,7 @@
 #pragma once
 #include <atomic>
-#include "../types.hpp"
+#include "types.hpp"
+#include "rocket.hpp"
 
 namespace sim {
 
@@ -12,6 +13,8 @@ namespace sim {
         void Run();
         void Stop() { running.store(false); }
         bool is_running() const { return running.load(); }
+
+        Rocket rocket;
 
         double get_time() const { return sim_time.load(); }
         Vec3 get_rocket_pos() const {

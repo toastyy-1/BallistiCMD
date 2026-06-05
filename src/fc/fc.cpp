@@ -9,6 +9,12 @@
 #include "fc.hpp"
 #include "imu.hpp"
 #include "types.hpp"
+#include "sim/rocket.hpp"
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+// structs                                                                                   //
+///////////////////////////////////////////////////////////////////////////////////////////////
 
 // holds the latest raw measurements collected from the sensors
 struct data_store {
@@ -18,18 +24,40 @@ struct data_store {
     double time; // time since start
 };
 
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+// helper functions                                                                          //
+///////////////////////////////////////////////////////////////////////////////////////////////
+
+// aquires new data from the sim
+void pull_new_data(const sim::Sim& sim, data_store& ds, IMU& imu) {
+    ds.a = imu.read_IMU_acc();
+    ds.w = imu.read_IMU_gyr();
+    ds.o = imu.read_IMU_mag();
+    ds.time = sim.get_time();
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+// flight controller loop                                                                    //
+///////////////////////////////////////////////////////////////////////////////////////////////
 // runs on its own thread alongside the sim
-int flight_controller(const sim::Sim& sim) {
+int flight_controller(sim::Sim& sim) {
+
+    ////////////////////////////
+    // init                   //
+    ////////////////////////////
     IMU imu(sim);
     data_store ds;
+    Rocket& r = sim.rocket;
 
+    ////////////////////////////
+    // control loop           //
+    ////////////////////////////
     while (sim.is_running()) {
-        ds.a = imu.read_IMU_acc();
-        ds.w = imu.read_IMU_gyr();
-        ds.o = imu.read_IMU_mag();
-        ds.time = sim.get_time();
+        pull_new_data(sim, ds, imu);
 
-        std::cout << ds.w.y << std::endl;
+        r.apply_thrust(100);
 
         std::this_thread::sleep_for(std::chrono::duration<double>(0.01));
     }

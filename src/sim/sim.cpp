@@ -15,7 +15,6 @@ namespace sim {
     Sim::~Sim() {}
 
     void Sim::Run() {
-        Rocket rocket;
         rocket.set_pos({0, 0, EARTH_RADIUS_M});
         rocket.set_mass(5900.0);
         rocket.set_nose_to_engine_length(rocket_length);
@@ -33,20 +32,6 @@ namespace sim {
             ///////////////////////////////////////////////////////////////////////////////////////////////
 
             Quat gimbal = {1, 0, 0, 0};
-
-            if (t < 90.0) {
-                rocket.apply_thrust(100);
-
-                if (t < 10.0) {
-                    gimbal = {1, 0, 0, 0};
-                } else if (t < 10.5) {
-                    gimbal = {0.9999985, 0, -0.001745, 0};
-                } else {
-                    gimbal = {1, 0, 0, 0};
-                }
-            } else {
-                rocket.apply_thrust(0);
-            }
 
             rocket.set_engine_orientation(gimbal);
 
