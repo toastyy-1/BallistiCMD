@@ -21,7 +21,6 @@
 struct data_store {
     Vec3 a; // acceleration from the IMU
     Vec3 w; // angular velocity from the IMU
-    Vec3 o; // magnetic field from the IMU
     double time; // time since start
 };
 
@@ -61,7 +60,6 @@ void print_telemetry(const data_store& ds, const control_states& cs) {
               << "\033[0;37m  T+" << "\033[1;37m" << std::fixed << std::setprecision(1) << ds.time << "s"
               << "\033[0;37m  acc=" << "\033[1;36m" << std::setprecision(2) << ds.a.norm() << "m/s²"
               << "\033[0;37m  gyr=" << "\033[1;36m" << ds.w.norm() << "rad/s"
-              << "\033[0;37m  mag=" << "\033[1;36m" << ds.o.norm() << "μT"
               << "\033[0m\n";
 }
 
@@ -69,7 +67,6 @@ void print_telemetry(const data_store& ds, const control_states& cs) {
 void pull_new_data(const sim::Sim& sim, data_store& ds, IMU& imu) {
     ds.a = imu.read_IMU_acc();
     ds.w = imu.read_IMU_gyr();
-    ds.o = imu.read_IMU_mag();
     ds.time = sim.get_time();
 }
 

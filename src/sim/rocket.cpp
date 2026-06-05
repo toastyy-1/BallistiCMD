@@ -226,7 +226,7 @@ void Rocket::set_engine_orientation(Quat orientation) {
 }
 
 void Rocket::set_start(double latitude, double longitude) {
-    // conv to degrees
+    // conv to radians
     latitude *= M_PI / 180.0;
     longitude *= M_PI / 180.0;
 
