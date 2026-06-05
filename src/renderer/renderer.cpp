@@ -3,7 +3,7 @@
 #include <raymath.h>
 #include <rlgl.h>
 #include <math.h>
-#include <algorithm>
+#include <initializer_list>
 
 namespace renderer {
 
@@ -17,44 +17,97 @@ Vec3 qrot(const Quat& q, const Vec3& v) {
 }
 
 double clampd(double v, double lo, double hi) {
-    return std::max(lo, std::min(hi, v));
+    return fmax(lo, fmin(hi, v));
 }
+
+// Sun-lit Earth. The surface normal is rebuilt from the fragment's world
+// position relative to the sphere centre, so the result never depends on
+// raylib's normal-matrix convention. mvp / matModel / texture0 / colDiffuse are
+// auto-bound by raylib from their standard names.
+const char* kEarthVS = R"(#version 330
+in vec3 vertexPosition;
+in vec2 vertexTexCoord;
+uniform mat4 mvp;
+uniform mat4 matModel;
+out vec2 fragTexCoord;
+out vec3 fragWorldPos;
+void main() {
+    fragTexCoord = vertexTexCoord;
+    fragWorldPos = (matModel*vec4(vertexPosition, 1.0)).xyz;
+    gl_Position  = mvp*vec4(vertexPosition, 1.0);
+}
+)";
+
+const char* kEarthFS = R"(#version 330
+in vec2 fragTexCoord;
+in vec3 fragWorldPos;
+uniform sampler2D texture0;
+uniform vec4 colDiffuse;
+uniform vec3 sunDir;       // direction TO the sun (world)
+uniform vec3 earthCenter;  // sphere centre (world)
+uniform vec3 camPos;       // camera position (world)
+out vec4 finalColor;
+void main() {
+    vec3 N = normalize(fragWorldPos - earthCenter);
+    vec3 L = normalize(sunDir);
+    vec3 V = normalize(camPos - fragWorldPos);
+
+    vec3  albedo = texture(texture0, fragTexCoord).rgb*colDiffuse.rgb;
+    float diff   = max(dot(N, L), 0.0);
+    vec3  color  = albedo*(0.15 + 0.85*diff);            // ambient + lambert
+
+    // Atmospheric limb glow: strongest at the silhouette, brighter in sunlight.
+    float rim = pow(1.0 - max(dot(N, V), 0.0), 3.0);
+    color += vec3(0.30, 0.50, 0.95)*rim*(0.35 + 0.65*diff);
+
+    finalColor = vec4(color, 1.0);
+}
+)";
 
 } // namespace
 
 Renderer::Renderer(const sim::Sim& s) : sim_(s) {
-    SetConfigFlags(FLAG_WINDOW_RESIZABLE);
+    SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT);
     InitWindow(1920, 1080, "Missile Program");
     SetWindowMonitor(0);
     SetTargetFPS(60);
 
+    // Trilinear + mipmaps keep the Earth crisp and shimmer-free at any zoom.
     tex = LoadTexture("src/renderer/world.jpg");
+    GenTextureMipmaps(&tex);
+    SetTextureFilter(tex, TEXTURE_FILTER_TRILINEAR);
+
+    // Equirectangular map: swap the generated UVs so it wraps cleanly, then spin
+    // the model -90 deg about X so its poles sit on the ECI Z axis.
     Mesh mesh = GenMeshSphere(EARTH_RADIUS_KM, 128, 128);
     for (int i = 0; i < mesh.vertexCount; i++) {
         float u = mesh.texcoords[i*2 + 0];
-        float v = mesh.texcoords[i*2 + 1];
-        mesh.texcoords[i*2 + 0] = v;
+        mesh.texcoords[i*2 + 0] = mesh.texcoords[i*2 + 1];
         mesh.texcoords[i*2 + 1] = u;
     }
     UpdateMeshBuffer(mesh, 1, mesh.texcoords, mesh.vertexCount * 2 * sizeof(float), 0);
     sphere = LoadModelFromMesh(mesh);
-    sphere.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = tex;
     sphere.transform = MatrixRotateX(-PI/2);
+
+    earthShader    = LoadShaderFromMemory(kEarthVS, kEarthFS);
+    sunDirLoc      = GetShaderLocation(earthShader, "sunDir");
+    earthCenterLoc = GetShaderLocation(earthShader, "earthCenter");
+    camPosLoc      = GetShaderLocation(earthShader, "camPos");
+    sphere.materials[0].shader = earthShader;
+    sphere.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = tex;
 }
 
 Renderer::~Renderer() {
-    UnloadModel(sphere);
-    UnloadTexture(tex);
+    UnloadModel(sphere);   // also releases the Earth shader and texture it owns
     CloseWindow();
 }
 
 void Renderer::Run() {
     while (!WindowShouldClose()) {
         HandleInput();
-        // Sample once per frame so camera, axes, rocket, and earth all agree.
+        // Sample once per frame so camera, axes, rocket, and Earth all agree.
         p_ref_eci_ = sim_.get_rocket_pos();
-        Camera3D cam = BuildCamera();
-        DrawFrame(cam);
+        DrawFrame(BuildCamera());
     }
 }
 
@@ -63,18 +116,15 @@ void Renderer::HandleInput() {
         Vector2 d = GetMouseDelta();
         yaw   -= d.x * 0.005f;
         pitch += d.y * 0.005f;
-        if (pitch >  1.5f) pitch =  1.5f;
-        if (pitch < -1.5f) pitch = -1.5f;
+        pitch = Clamp(pitch, -1.5f, 1.5f);  // avoid the straight-up/down singularity
     }
     float wheel = GetMouseWheelMove();
     if (wheel != 0.0f) dist *= powf(0.9f, wheel);
-    if (dist < 0.02f) dist = 0.02f;  // 20m min — close enough to see real-size rocket
-    if (dist > EARTH_RADIUS_KM * 50.0f) dist = EARTH_RADIUS_KM * 50.0f;
+    dist = Clamp(dist, 0.02f, EARTH_RADIUS_KM * 50.0f);  // 20 m .. 50 Earth radii
 }
 
 Camera3D Renderer::BuildCamera() const {
-    // Scene is rendered with the rocket at the world origin (see p_ref_eci_),
-    // so the camera target is (0,0,0) and the camera offset stays small.
+    // Orbit the world origin (where the rocket sits in the shifted scene).
     return Camera3D {
         {
             dist * cosf(pitch) * sinf(yaw),
@@ -88,80 +138,101 @@ Camera3D Renderer::BuildCamera() const {
     };
 }
 
+void Renderer::DrawFrame(const Camera3D& cam) {
+    // Tight, per-frame clip planes are what keep the depth buffer usable across
+    // this scene's enormous scale range (an 11 m rocket beside a 6378 km Earth).
+    // They MUST be set before BeginMode3D, which bakes them into the projection.
+    // Near tracks the closest geometry (rocket or near Earth limb); far reaches
+    // just past the planet so nothing useful is clipped while precision stays high.
+    Vector3 earthC  = ToView({0, 0, 0});            // Earth centre == ECI origin
+    float    toEarth = Vector3Distance(cam.position, earthC);
+    float    nearGeom = fminf(toEarth - EARTH_RADIUS_KM, dist - 0.02f);
+    float    nearP    = fmaxf(nearGeom * 0.5f, 0.001f);
+    float    farP     = toEarth + 2.5f * EARTH_RADIUS_KM;
+    rlSetClipPlanes(nearP, farP);
+
+    BeginDrawing();
+    ClearBackground(BLACK);
+    BeginMode3D(cam);
+        DrawEarth(cam, earthC);
+        DrawECIAxes();
+        DrawBodyAxes();
+        DrawPredictedTrajectory();
+        DrawRocket();
+    EndMode3D();
+    DrawTelemetry();
+    EndDrawing();
+}
+
+void Renderer::DrawEarth(const Camera3D& cam, Vector3 earthC) {
+    // Bias the sun toward the rocket's local-up so the launch area stays lit,
+    // with a fixed offset that gives a natural day/night terminator on the limb.
+    Vector3 up  = Vector3Normalize(Vector3Negate(earthC));   // origin - centre
+    Vector3 sun = Vector3Normalize(Vector3Add(Vector3Scale(up, 0.55f),
+                                              Vector3{ 0.5f, 0.45f, 0.35f }));
+    SetShaderValue(earthShader, sunDirLoc,      &sun,          SHADER_UNIFORM_VEC3);
+    SetShaderValue(earthShader, earthCenterLoc, &earthC,       SHADER_UNIFORM_VEC3);
+    SetShaderValue(earthShader, camPosLoc,      &cam.position, SHADER_UNIFORM_VEC3);
+    DrawModel(sphere, earthC, 1.0f, WHITE);
+}
+
 void Renderer::DrawRocket() const {
-    // Scene is shifted so p_ref_eci_ sits at the world origin. We subtract it
-    // in double precision before converting to float to avoid jitter from
-    // ~7-digit float precision at ECI magnitudes (Earth radius ~6.4e6 m).
-    // Sphere model is rotated -90deg about X, so ECI (x, y, z) -> world (x, z, y).
-    auto eci_to_view = [this](Vec3 v_m) {
-        Vec3 d = v_m - p_ref_eci_;
-        return Vector3 {
-            float(d.x * M_TO_KM),
-            float(d.z * M_TO_KM),
-            float(d.y * M_TO_KM),
-        };
-    };
-    // Rotate vector v by quaternion q (Rodrigues form: v + 2w(q × v) + 2(q × (q × v))).
-    auto qrot = [](Quat q, Vec3 v) {
-        Vec3 qv {q.x, q.y, q.z};
-        Vec3 t = qv.cross(v);
-        return v + t * (2.0 * q.w) + qv.cross(t) * 2.0;
-    };
+    // Palette.
+    const Color kBody = { 226, 229, 235, 255 };  // brushed silver
+    const Color kNose = { 196,  58,  58, 255 };  // red cap
+    const Color kFin  = {  74,  80,  92, 255 };  // gunmetal
+    const Color kBell = {  54,  56,  62, 255 };  // dark nozzle
+    const int   kSides = 24;                      // smoother than the old 16
 
-    Quat qr  = sim_.get_rocket_orientation();
-    Quat qe  = sim_.get_engine_orientation();
-
+    Quat   qr       = sim_.get_rocket_orientation();
+    Quat   qe       = sim_.get_engine_orientation();
     double length   = sim_.get_rocket_length();
     double cm_dist  = sim_.get_rocket_cm_dist();
     double eng_dist = sim_.get_engine_distance();
     double radius   = sim_.get_rocket_radius();
 
-    // Body +Z (nose direction) in ECI.
+    // Body frame in ECI: bz = nose direction, bx/by span the radial plane.
     Vec3 bz = qrot(qr, {0, 0, 1});
+    Vec3 bx = qrot(qr, {1, 0, 0});
+    Vec3 by = qrot(qr, {0, 1, 0});
+    auto along = [&](double d) { return p_ref_eci_ + bz * (cm_dist - d); };  // d metres below the nose tip
 
-    // Body endpoints (ECI meters). Nose-cone is top 20% of body length.
-    double nose_cone_len = length * 0.2;
-    Vec3 nose_eci    = p_ref_eci_ + bz * cm_dist;
-    Vec3 cone_base   = p_ref_eci_ + bz * (cm_dist - nose_cone_len);
-    Vec3 tail_eci    = p_ref_eci_ + bz * (cm_dist - length);
-    Vec3 engine_eci  = p_ref_eci_ + bz * (cm_dist - eng_dist);
+    // Hull: cylindrical body capped by a conical nose (top 18% of the length).
+    double cone_len = length * 0.18;
+    Vector3 noseW   = ToView(along(0.0));
+    Vector3 coneW   = ToView(along(cone_len));
+    Vector3 shoulderW = ToView(along(cone_len + length * 0.04));  // thin collar under the cone
+    Vector3 tailW   = ToView(along(length));
+    Vector3 engineW = ToView(along(eng_dist));
+    float   radiusW = float(radius * M_TO_KM);
 
-    Vector3 noseW    = eci_to_view(nose_eci);
-    Vector3 coneW    = eci_to_view(cone_base);
-    Vector3 tailW    = eci_to_view(tail_eci);
-    Vector3 engineW  = eci_to_view(engine_eci);
-    float   radiusW  = float(radius * M_TO_KM);
+    DrawCylinderEx(tailW, coneW, radiusW, radiusW, kSides, kBody);          // main body
+    DrawCylinderEx(shoulderW, coneW, radiusW * 1.04f, radiusW, kSides, kFin); // collar
+    DrawCylinderEx(coneW, noseW, radiusW, 0.0f, kSides, kNose);             // nose cone
 
-    // Main body + nose cone.
-    DrawCylinderEx(tailW, coneW, radiusW, radiusW, 16, LIGHTGRAY);
-    DrawCylinderEx(coneW, noseW, radiusW, 0.0f,    16, LIGHTGRAY);
+    // Four swept tail fins. Each is a double-sided triangle so it reads from
+    // any angle: leading edge up the body, trailing edge swept past the tail.
+    Vec3   tail    = along(length);
+    double finUp   = length * 0.16;     // how far the leading edge climbs the body
+    double finOut  = radius * 2.4;      // span beyond the hull
+    double finBack = length * 0.05;     // trailing-edge sweep behind the tail
+    for (const Vec3& rad : { bx, by, -bx, -by }) {
+        Vector3 a = ToView(tail + bz * finUp + rad * radius);
+        Vector3 b = ToView(tail + rad * radius);
+        Vector3 c = ToView(tail - bz * finBack + rad * (radius + finOut));
+        DrawTriangle3D(a, b, c, kFin);
+        DrawTriangle3D(a, c, b, kFin);  // back face
+    }
 
-    // Engine bell: gimbaled. Thrust direction in body = q_engine rotated +Z;
-    // then q_rocket carries it to ECI. Bell points opposite the thrust.
-    Vec3 thrust_body = qrot(qe, {0, 0, 1});
-    Vec3 thrust_eci  = qrot(qr, thrust_body);
-
-    double bell_length = 1.5;
-    Vec3 bell_end_eci  = engine_eci - thrust_eci * bell_length;
-    Vector3 bellW      = eci_to_view(bell_end_eci);
-
-    DrawCylinderEx(engineW, bellW, radiusW * 0.5f, radiusW * 1.1f, 16, ORANGE);
+    // Gimbaled engine bell: thrust = q_rocket * (q_engine * +Z); bell points opposite.
+    Vec3    thrust_eci = qrot(qr, qrot(qe, {0, 0, 1}));
+    Vector3 bellW      = ToView(along(eng_dist) - thrust_eci * 1.5);
+    DrawCylinderEx(engineW, bellW, radiusW * 0.4f, radiusW * 1.15f, kSides, kBell);
 }
 
 void Renderer::DrawPredictedTrajectory() const {
-    // Ballistic prediction: take the rocket's current position and velocity and
-    // propagate them forward under point-mass gravity only (no thrust, no drag),
-    // i.e. where the rocket would coast if the engine cut out right now. The path
-    // is integrated with RK4 and drawn as a polyline in the shifted scene.
-    auto eci_to_view = [this](Vec3 v_m) {
-        Vec3 d = v_m - p_ref_eci_;
-        return Vector3 {
-            float(d.x * M_TO_KM),
-            float(d.z * M_TO_KM),
-            float(d.y * M_TO_KM),
-        };
-    };
-    // Gravitational acceleration at ECI position p.
+    // Where the rocket would coast if the engine cut out now: propagate the
+    // current state under point-mass gravity (no thrust, no drag) with RK4.
     auto grav = [](Vec3 p) {
         double rn = p.norm();
         return p * (-GM_EARTH / (rn * rn * rn));
@@ -170,93 +241,48 @@ void Renderer::DrawPredictedTrajectory() const {
     Vec3 r = sim_.get_rocket_pos();
     Vec3 v = sim_.get_rocket_vel();
 
-    const double dt        = 1.0;     // s per integration step
-    const int    max_steps = 20000;   // cap on path length
+    const double dt        = 1.0;     // s per step
+    const int    max_steps = 20000;   // path-length cap
 
     rlSetLineWidth(2.0f);
-    Vector3 prev = eci_to_view(r);
+    Vector3 prev = ToView(r);
     for (int i = 0; i < max_steps; i++) {
-        // RK4 step on (r, v) under gravity.
-        Vec3 k1r = v;
-        Vec3 k1v = grav(r);
-        Vec3 k2r = v + k1v * (dt / 2);
-        Vec3 k2v = grav(r + k1r * (dt / 2));
-        Vec3 k3r = v + k2v * (dt / 2);
-        Vec3 k3v = grav(r + k2r * (dt / 2));
-        Vec3 k4r = v + k3v * dt;
-        Vec3 k4v = grav(r + k3r * dt);
+        Vec3 k1r = v,                k1v = grav(r);
+        Vec3 k2r = v + k1v*(dt/2),   k2v = grav(r + k1r*(dt/2));
+        Vec3 k3r = v + k2v*(dt/2),   k3v = grav(r + k2r*(dt/2));
+        Vec3 k4r = v + k3v*dt,       k4v = grav(r + k3r*dt);
+        r += (k1r + k2r*2 + k3r*2 + k4r) * (dt/6);
+        v += (k1v + k2v*2 + k3v*2 + k4v) * (dt/6);
 
-        r += (k1r + k2r * 2 + k3r * 2 + k4r) * (dt / 6);
-        v += (k1v + k2v * 2 + k3v * 2 + k4v) * (dt / 6);
-
-        Vector3 cur = eci_to_view(r);
+        Vector3 cur = ToView(r);
         DrawLine3D(prev, cur, YELLOW);
         prev = cur;
 
-        // Stop once the predicted path reaches the surface.
-        if (r.norm() <= EARTH_RADIUS_M) break;
+        if (r.norm() <= EARTH_RADIUS_M) break;      // reached the surface
     }
 }
 
 void Renderer::DrawECIAxes() const {
-    // ECI axes: X = vernal equinox (red), Y = 90E equatorial (green), Z = north pole (blue).
-    // Sphere is drawn with a -90deg X rotation, so world Y here corresponds to ECI Z.
-    // ECI origin is at (-p_ref) in the shifted scene.
-    const float L  = EARTH_RADIUS_KM * 1.5f;
-    const float ox = -float(p_ref_eci_.x * M_TO_KM);
-    const float oy = -float(p_ref_eci_.z * M_TO_KM);
-    const float oz = -float(p_ref_eci_.y * M_TO_KM);
+    // ECI axes through the Earth's centre: X vernal equinox (red),
+    // Y 90E equatorial (green), Z north pole (blue).
+    const double L = EARTH_RADIUS_M * 1.5;
     rlSetLineWidth(2.0f);
-    DrawLine3D({ ox - L, oy,     oz     }, { ox + L, oy,     oz     }, RED);
-    DrawLine3D({ ox,     oy,     oz - L }, { ox,     oy,     oz + L }, GREEN);
-    DrawLine3D({ ox,     oy - L, oz     }, { ox,     oy + L, oz     }, BLUE);
+    DrawLine3D(ToView({-L, 0, 0}), ToView({L, 0, 0}), RED);
+    DrawLine3D(ToView({0, -L, 0}), ToView({0, L, 0}), GREEN);
+    DrawLine3D(ToView({0, 0, -L}), ToView({0, 0, L}), BLUE);
 }
 
 void Renderer::DrawBodyAxes() const {
-    // Body axes are the columns of the rotation matrix built from q_rocket
-    // (body -> ECI). Body +Z is the nose direction.
+    // Body triad at the rocket (world origin), scaled with zoom to stay visible.
     Quat q = sim_.get_rocket_orientation();
-    double w = q.w, x = q.x, y = q.y, z = q.z;
-    Vec3 bx { 1.0 - 2.0*(y*y + z*z), 2.0*(x*y + w*z),       2.0*(x*z - w*y)       };
-    Vec3 by { 2.0*(x*y - w*z),       1.0 - 2.0*(x*x + z*z), 2.0*(y*z + w*x)       };
-    Vec3 bz { 2.0*(x*z + w*y),       2.0*(y*z - w*x),       1.0 - 2.0*(x*x + y*y) };
-
-    // Rocket sits at the world origin in the shifted scene.
-    Vector3 origin = { 0, 0, 0 };
-    // ECI (x, y, z) -> world (x, z, y), same swap used elsewhere.
-    auto tipWorld = [&](const Vec3& v, float L) {
-        return Vector3 {
-            origin.x + L * float(v.x),
-            origin.y + L * float(v.z),
-            origin.z + L * float(v.y),
-        };
+    const float L = dist * 0.08f;
+    auto tip = [&](const Vec3& v) {
+        return Vector3 { L * float(v.x), L * float(v.z), L * float(v.y) };  // ECI->world swap
     };
-    const float L = dist * 0.08f;  // scales with zoom so triad stays visible
     rlSetLineWidth(2.0f);
-    DrawLine3D(origin, tipWorld(bx, L), PINK);     // body X
-    DrawLine3D(origin, tipWorld(by, L), LIME);     // body Y
-    DrawLine3D(origin, tipWorld(bz, L), SKYBLUE);  // body Z (nose)
-}
-
-void Renderer::DrawFrame(const Camera3D& cam) {
-    BeginDrawing();
-    ClearBackground(BLACK);
-    BeginMode3D(cam);
-    rlSetClipPlanes(0.005, 1.0e8);  // 5m near to keep a real-size rocket visible up close
-    // Earth center is the ECI origin; in the shifted scene that's -p_ref.
-    Vector3 earthPos {
-        -float(p_ref_eci_.x * M_TO_KM),
-        -float(p_ref_eci_.z * M_TO_KM),
-        -float(p_ref_eci_.y * M_TO_KM),
-    };
-    DrawModel(sphere, earthPos, 1.0f, WHITE);
-    DrawECIAxes();
-    DrawBodyAxes();
-    DrawPredictedTrajectory();
-    DrawRocket();
-    EndMode3D();
-    DrawTelemetry();
-    EndDrawing();
+    DrawLine3D({0, 0, 0}, tip(qrot(q, {1, 0, 0})), PINK);     // body X
+    DrawLine3D({0, 0, 0}, tip(qrot(q, {0, 1, 0})), LIME);     // body Y
+    DrawLine3D({0, 0, 0}, tip(qrot(q, {0, 0, 1})), SKYBLUE);  // body Z (nose)
 }
 
 void Renderer::DrawTelemetry() const {
