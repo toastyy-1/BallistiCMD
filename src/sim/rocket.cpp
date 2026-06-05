@@ -51,7 +51,7 @@ void Rocket::update_dynamics() {
     double r_norm = r.norm();
 
     // thrust acceleration
-    Vec3 a_thrust = nose_direction_eci() * (calculate_engine_thrust_component() / m);
+    Vec3 a_thrust = nose_direction_eci() * (calculate_engine_thrust_component() / m_dry);
 
     ///////////////////////////////////////////////////////////////////////////////////////////////
     // RK4 integration                                                                           //
@@ -173,10 +173,21 @@ void Rocket::update_rotation() {
     q_rocket.y /= qnorm;
     q_rocket.z /= qnorm;
 
-
 }
 
-void Rocket::apply_thrust(double throttle_percent) {
+// updates the fuel mass based on the current throttle and mass flow rate
+void Rocket::update_mass() {
+    double per = current_thrust / max_thrust;
+    if (m_fuel > 0) {
+        double sub = per * m_flow_rate;
+        if (sub > m_fuel) {
+            m_fuel = 0;
+        }
+        else m_fuel -= sub;
+    }
+}
+
+void Rocket::activate_engine(double throttle_percent) {
     double throttle = throttle_percent / 100.0;
     current_thrust = max_thrust * throttle;
 }

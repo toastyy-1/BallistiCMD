@@ -18,14 +18,16 @@ class Rocket {
     Vec3 get_ang_vel() const { return w; }
     Quat get_orientation() const { return q_rocket; }
     Quat get_engine_orientation() const { return q_engine; }
-    double get_mass() const { return m; }
+    double get_mass() const { return m_dry + m_fuel; }
     double get_inertia() const { return I; }
     double get_drag_coeff() const { return Cd; }
 
     // setters (should only be used on setup)
     void set_pos(const Vec3& pos) { r = pos; }
     void set_orientation(const Quat& orient) { q_rocket = orient; }
-    void set_mass(double mass) { m = mass; }
+    void set_dry_mass(double mass) { m_dry = mass; }
+    void set_fuel_mass(double mass) { m_fuel = mass; }
+    void set_mass_flow_rate(double mfr) { m_flow_rate = mfr; }
     void set_drag_coeff(double drag_coeff) { Cd = drag_coeff; }
     void set_nose_to_engine_length(double nel) { nose_to_engine_length = nel; }
     void set_CM_dist(double cm_dist) { CM_dist = cm_dist; }
@@ -38,7 +40,8 @@ class Rocket {
     // simulation things
     void update_dynamics();
     void update_rotation();
-    void apply_thrust(double throttle_percent);
+    void update_mass();
+    void activate_engine(double throttle_percent);
     void set_engine_orientation(Quat orientation);
 
     ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -46,7 +49,8 @@ class Rocket {
     ///////////////////////////////////////////////////////////////////////////////////////////////
     private:
     // rocket parameters
-    double m = 0.0; // mass
+    double m_dry = 0.0; // dry mass
+    double m_fuel = 0.0; // fuel mass
     double nose_to_engine_length = 0.0; // m
     double CM_dist = 0.0; // distance of center of mass from the nose
     double I = 0.0; // moment of inertia
@@ -56,6 +60,7 @@ class Rocket {
     double current_thrust = 0.0; // N
     double max_thrust = 0.0;
     double engine_distance = 0.0; // distance of engine from nose
+    double m_flow_rate = 0.0; // flow rate of mass out of the engine - kg/s
     double engine_gimball_range = 0.0; // degrees
 
     // sim states

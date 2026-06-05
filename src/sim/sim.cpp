@@ -16,7 +16,9 @@ namespace sim {
 
     void Sim::Run() {
         rocket.set_pos({0, 0, EARTH_RADIUS_M});
-        rocket.set_mass(5900.0);
+        rocket.set_dry_mass(5900.0);
+        rocket.set_fuel_mass(1000.0);
+        rocket.set_mass_flow_rate(53);
         rocket.set_nose_to_engine_length(rocket_length);
         rocket.set_CM_dist(rocket_cm_dist);
         rocket.set_moment_of_inertia(62000.0);
@@ -24,6 +26,7 @@ namespace sim {
         rocket.set_max_thrust(131000.0);
         rocket.set_engine_dist(rocket_engine_dist);
         rocket.set_engine_gimball_range(5.0);
+        rocket.set_engine_orientation({1, 0, 0, 0});
 
         while (running.load()) {
 
@@ -31,19 +34,20 @@ namespace sim {
             // sim                                                                                       //
             ///////////////////////////////////////////////////////////////////////////////////////////////
 
-            Quat gimbal = {1, 0, 0, 0};
+            /*
+                !!! NOTE !!! THE ROCKET SHOULD NOT BE CONTROLLED FROM HERE AT ALL ASSUMING THE FC IS ACTIVE
+            */
 
-            rocket.set_engine_orientation(gimbal);
-
-            // update the position and orientation of the rocket
+            // update the position, orientation, and mass of the rocket
             rocket.update_dynamics();
             rocket.update_rotation();
+            rocket.update_mass();
 
             // increment time step
             t += TIME_STEP;
 
             ///////////////////////////////////////////////////////////////////////////////////////////////
-            // pass shit to renderer                                                                     //
+            // pass shit to renderer and fc                                                              //
             ///////////////////////////////////////////////////////////////////////////////////////////////
 
             // store the rocket's position so that the renderer can access it
@@ -51,6 +55,10 @@ namespace sim {
             rocket_x.store(p.x);
             rocket_y.store(p.y);
             rocket_z.store(p.z);
+            Vec3 vel = rocket.get_vel();
+            rocket_vx.store(vel.x);
+            rocket_vy.store(vel.y);
+            rocket_vz.store(vel.z);
             Quat q = rocket.get_orientation();
             rocket_qw.store(q.w);
             rocket_qx.store(q.x);

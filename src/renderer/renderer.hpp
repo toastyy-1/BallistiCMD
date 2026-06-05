@@ -20,6 +20,7 @@ private:
     void DrawECIAxes() const;
     void DrawBodyAxes() const;
     void DrawRocket() const;
+    void DrawPredictedTrajectory() const;
 
     // The scene is shifted so this point (the rocket's ECI position) sits at the
     // world origin, which keeps the rocket geometry inside the precision sweet

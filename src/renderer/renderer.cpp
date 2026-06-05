@@ -132,6 +132,56 @@ void Renderer::DrawRocket() const {
     DrawCylinderEx(engineW, bellW, radiusW * 0.5f, radiusW * 1.1f, 16, ORANGE);
 }
 
+void Renderer::DrawPredictedTrajectory() const {
+    // Ballistic prediction: take the rocket's current position and velocity and
+    // propagate them forward under point-mass gravity only (no thrust, no drag),
+    // i.e. where the rocket would coast if the engine cut out right now. The path
+    // is integrated with RK4 and drawn as a polyline in the shifted scene.
+    auto eci_to_view = [this](Vec3 v_m) {
+        Vec3 d = v_m - p_ref_eci_;
+        return Vector3 {
+            float(d.x * M_TO_KM),
+            float(d.z * M_TO_KM),
+            float(d.y * M_TO_KM),
+        };
+    };
+    // Gravitational acceleration at ECI position p.
+    auto grav = [](Vec3 p) {
+        double rn = p.norm();
+        return p * (-GM_EARTH / (rn * rn * rn));
+    };
+
+    Vec3 r = sim_.get_rocket_pos();
+    Vec3 v = sim_.get_rocket_vel();
+
+    const double dt        = 1.0;     // s per integration step
+    const int    max_steps = 20000;   // cap on path length
+
+    rlSetLineWidth(2.0f);
+    Vector3 prev = eci_to_view(r);
+    for (int i = 0; i < max_steps; i++) {
+        // RK4 step on (r, v) under gravity.
+        Vec3 k1r = v;
+        Vec3 k1v = grav(r);
+        Vec3 k2r = v + k1v * (dt / 2);
+        Vec3 k2v = grav(r + k1r * (dt / 2));
+        Vec3 k3r = v + k2v * (dt / 2);
+        Vec3 k3v = grav(r + k2r * (dt / 2));
+        Vec3 k4r = v + k3v * dt;
+        Vec3 k4v = grav(r + k3r * dt);
+
+        r += (k1r + k2r * 2 + k3r * 2 + k4r) * (dt / 6);
+        v += (k1v + k2v * 2 + k3v * 2 + k4v) * (dt / 6);
+
+        Vector3 cur = eci_to_view(r);
+        DrawLine3D(prev, cur, YELLOW);
+        prev = cur;
+
+        // Stop once the predicted path reaches the surface.
+        if (r.norm() <= EARTH_RADIUS_M) break;
+    }
+}
+
 void Renderer::DrawECIAxes() const {
     // ECI axes: X = vernal equinox (red), Y = 90E equatorial (green), Z = north pole (blue).
     // Sphere is drawn with a -90deg X rotation, so world Y here corresponds to ECI Z.
@@ -186,6 +236,7 @@ void Renderer::DrawFrame(const Camera3D& cam) {
     DrawModel(sphere, earthPos, 1.0f, WHITE);
     DrawECIAxes();
     DrawBodyAxes();
+    DrawPredictedTrajectory();
     DrawRocket();
     EndMode3D();
     t = sim_.get_time();

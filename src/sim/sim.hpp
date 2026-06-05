@@ -20,6 +20,9 @@ namespace sim {
         Vec3 get_rocket_pos() const {
             return { rocket_x.load(), rocket_y.load(), rocket_z.load() };
         }
+        Vec3 get_rocket_vel() const {
+            return { rocket_vx.load(), rocket_vy.load(), rocket_vz.load() };
+        }
         Quat get_rocket_orientation() const {
             return { rocket_qw.load(), rocket_qx.load(), rocket_qy.load(), rocket_qz.load() };
         }
@@ -44,6 +47,9 @@ namespace sim {
         std::atomic<double> rocket_x{0.0};
         std::atomic<double> rocket_y{0.0};
         std::atomic<double> rocket_z{0.0};
+        std::atomic<double> rocket_vx{0.0};
+        std::atomic<double> rocket_vy{0.0};
+        std::atomic<double> rocket_vz{0.0};
         std::atomic<double> rocket_qw{1.0};
         std::atomic<double> rocket_qx{0.0};
         std::atomic<double> rocket_qy{0.0};
