@@ -115,9 +115,12 @@ int flight_controller(sim::Sim& sim) {
                 engine_lit = true;
             }
 
-            static bool start = ds.time;
-            if (ds.time - start > 130) {
+            static double start = ds.time;
+            static bool is_separated = false;
+            if (ds.time - start > 130 && !is_separated) {
                 r.advance_stage();
+                is_separated = true;
+                r.light_engine();
             }
 
             const double turn_time = 3.0;
