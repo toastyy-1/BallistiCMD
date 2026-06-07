@@ -16,7 +16,7 @@ namespace sim {
     Sim::~Sim() {}
 
     void Sim::configure_rocket() {
-        rocket.set_start(35.9606, -83.9207);
+        rocket.set_start(origin_latitude, origin_longitude, target_latitude, target_longitude);
         rocket.set_radius(rocket_radius);
 
         Stage s1 = {

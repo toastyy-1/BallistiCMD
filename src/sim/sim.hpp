@@ -44,6 +44,12 @@ namespace sim {
         double rocket_engine_dist = 10.5;
         double rocket_radius = 0.5;
 
+        // launch origin and intended target (lat/lon in degrees)
+        double origin_latitude  =  35.9606;
+        double origin_longitude = -83.9207;
+        double target_latitude  =  38.9072; // TODO: placeholder target, set as desired
+        double target_longitude = -77.0369;
+
     };
 
 }

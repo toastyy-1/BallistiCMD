@@ -46,13 +46,13 @@ struct control_states {
 void print_telemetry(const data_store& ds, const control_states& cs) {
     const char* stage;
     switch (cs.stage) {
-        case STANDBY:          stage = "STANDBY";
-        case ARMED:            stage = "ARMED";
-        case POWERED_ASCENT:   stage = "POWERED ASCENT";
-        case UNPOWERED_ASCENT: stage = "UNPOWERED ASCENT";
-        case STAGE_SEPARATION: stage = "STAGE SEP";
-        case DESCENT:          stage = "DESCENT";
-        default:               stage = "UNKNOWN";
+        case STANDBY:          stage = "STANDBY"; break;
+        case ARMED:            stage = "ARMED"; break;
+        case POWERED_ASCENT:   stage = "POWERED ASCENT"; break;
+        case UNPOWERED_ASCENT: stage = "UNPOWERED ASCENT"; break;
+        case STAGE_SEPARATION: stage = "STAGE SEP"; break;
+        case DESCENT:          stage = "DESCENT"; break;
+        default:               stage = "UNKNOWN"; break;
     }
 
     std::cout << "\033[1;31m[" << "\033[1;33m" << stage

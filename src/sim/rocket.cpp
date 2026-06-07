@@ -218,7 +218,7 @@ void Rocket::update_mass() {
 
     double M = 0, M_f = 0, m_cm = 0, base = 0;
     for (int i = active_idx; i < NUM_STAGES; i++) {
-        const Stage& st = stages[i];
+        const Stage& st = props.stages[i];
         double m = st.m_dry + st.m_fuel;
         M += m;
         M_f += st.m_fuel;
@@ -230,10 +230,10 @@ void Rocket::update_mass() {
     z_cm = m_cm / M;
 
     // also adjust moment using assumption that each stage is uniform cylinder
-    double R2 = radius * radius, I_trans = 0;
+    double R2 = props.radius * props.radius, I_trans = 0;
     base = 0;
     for (int i = active_idx; i < NUM_STAGES; i++) {
-        const Stage& st = stages[i];
+        const Stage& st = props.stages[i];
         double m = st.m_dry + st.m_fuel, L = st.tip_to_end_length;
         double d = (base + L - st.CM_dist) - z_cm;
         I_trans += (1.0 / 12.0) * m * (3.0 * R2 + L * L) + m * d * d;
@@ -272,37 +272,44 @@ void Rocket::set_engine_orientation(Quat orientation) {
 
 void Rocket::set_stage(int stage_num, const Stage& cfg) {
     if (stage_num >= 1 && stage_num <= NUM_STAGES) {
-        stages[stage_num - 1] = cfg;
-        stages[stage_num - 1].id = stage_num;
+        props.stages[stage_num - 1] = cfg;
+        props.stages[stage_num - 1].id = stage_num;
     }
 }
 
-void Rocket::set_start(double latitude, double longitude) {
-    // conv to radians
-    latitude *= M_PI / 180.0;
-    longitude *= M_PI / 180.0;
-
-    // determine absolute position needed relative to lat and long
-    Vec3 pos = {
-        .x = EARTH_RADIUS_M * cos(latitude) * cos(longitude),
-        .y = EARTH_RADIUS_M * cos(latitude) * sin(longitude),
-        .z = EARTH_RADIUS_M * sin(latitude)
+static Vec3 lat_lon_to_eci(double latitude_deg, double longitude_deg) {
+    double lat = latitude_deg * M_PI / 180.0;
+    double lon = longitude_deg * M_PI / 180.0;
+    return {
+        .x = EARTH_RADIUS_M * cos(lat) * cos(lon),
+        .y = EARTH_RADIUS_M * cos(lat) * sin(lon),
+        .z = EARTH_RADIUS_M * sin(lat)
     };
+}
+
+void Rocket::set_start(double origin_latitude, double origin_longitude, double target_latitude, double target_longitude) {
+    Vec3 origin_pos = lat_lon_to_eci(origin_latitude, origin_longitude);
 
     // set the position of the rocket to that asolute position
-    set_pos(pos);
+    init_state.origin_r_eci = origin_pos;
+    set_pos(origin_pos);
+
+    // set target position
+    init_state.target_r_eci = lat_lon_to_eci(target_latitude, target_longitude);
 
     // determine the necessary orientation to achive normal "up" position from surface
+    double lat = origin_latitude * M_PI / 180.0;
+    double lon = origin_longitude * M_PI / 180.0;
     Vec3 unit_vec_from_center = {
-        .x = cos(latitude) * cos(longitude),
-        .y = cos(latitude) * sin(longitude),
-        .z = sin(latitude)
+        .x = cos(lat) * cos(lon),
+        .y = cos(lat) * sin(lon),
+        .z = sin(lat)
     };
     Vec3 up = {0, 0, 1}; // since +z is up
     Vec3 rotation_axis = up.cross(unit_vec_from_center);
     Vec3 rot_axis_u = rotation_axis / rotation_axis.norm();
 
-    double half_theta = acos(sin(latitude)) / 2;
+    double half_theta = acos(sin(lat)) / 2;
     Quat q = {
         .w = cos(half_theta),
         .x = sin(half_theta) * rot_axis_u.x,
@@ -312,4 +319,5 @@ void Rocket::set_start(double latitude, double longitude) {
     
     // set the oritnetaion of the rocket to normal the surface
     set_orientation(q);
+    init_state.origin_q_eci = q;
 }
