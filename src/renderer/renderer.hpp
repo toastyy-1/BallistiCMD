@@ -21,6 +21,7 @@ private:
     void DrawEarth(const Camera3D& cam, Vector3 earthC);
     void DrawECIAxes() const;
     void DrawBodyAxes() const;
+    void DrawSurfaceMarkers() const;
     void DrawRocket() const;
     void DrawPredictedTrajectory() const;
     void DrawTelemetry() const;

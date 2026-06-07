@@ -43,6 +43,8 @@ class Rocket {
     double get_active_fuel() const { return active().m_fuel; }
     bool active_is_powered() const { return active().max_thrust > 0.0; }
     InitialStates get_rocket_initial_states() const { return init_state; }
+    double get_radius() const { return props.radius; }
+    double get_length() const;
 
     // setters (should only be used on setup)
     void set_pos(const Vec3& pos) { r = pos; } // set absolute position

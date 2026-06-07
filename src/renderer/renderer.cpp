@@ -175,6 +175,7 @@ void Renderer::DrawFrame(const Camera3D& cam) {
         DrawEarth(cam, earthC);
         DrawECIAxes();
         DrawBodyAxes();
+        DrawSurfaceMarkers();
         DrawPredictedTrajectory();
         DrawRocket();
     EndMode3D();
@@ -324,6 +325,34 @@ void Renderer::DrawBodyAxes() const {
     DrawLine3D({0, 0, 0}, tip(qrot(q, {1, 0, 0})), PINK);     // body X
     DrawLine3D({0, 0, 0}, tip(qrot(q, {0, 1, 0})), LIME);     // body Y
     DrawLine3D({0, 0, 0}, tip(qrot(q, {0, 0, 1})), SKYBLUE);  // body Z (nose)
+}
+
+void Renderer::DrawSurfaceMarkers() const {
+    // Launch origin and intended target: fixed points on the Earth's surface.
+    // Each is drawn as a small "pin" — a stalk along the local vertical capped
+    // by a sphere — so it reads as a point planted on the ground and is occluded
+    // by the globe when it rotates to the far side. Sized with zoom so the pins
+    // stay a roughly constant apparent size from the rocket's launch pad out to
+    // a full view of the planet.
+    InitialStates init = sim_.rocket.get_rocket_initial_states();
+
+    const float sphereR = dist * 0.02f;          // marker radius (km, view units)
+    const float pinLen  = dist * 0.06f;          // stalk height above the surface
+    rlSetLineWidth(2.0f);
+
+    auto pin = [&](const Vec3& surf_eci, Color c) {
+        double n = surf_eci.norm();
+        if (n < 1e-6) return;
+        Vec3    out      = surf_eci / n;                        // local vertical (ECI)
+        Vec3    tip_eci  = surf_eci + out * (pinLen * KM_TO_M); // lift the cap off the ground
+        Vector3 baseW    = ToView(surf_eci);
+        Vector3 tipW     = ToView(tip_eci);
+        DrawLine3D(baseW, tipW, c);
+        DrawSphere(tipW, sphereR, c);
+    };
+
+    pin(init.origin_r_eci, GREEN);   // launch origin
+    pin(init.target_r_eci, RED);     // intended target
 }
 
 void Renderer::DrawTelemetry() const {

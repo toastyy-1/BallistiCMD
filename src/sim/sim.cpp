@@ -16,8 +16,12 @@ namespace sim {
     Sim::~Sim() {}
 
     void Sim::configure_rocket() {
+        double origin_latitude  =  35.9606;
+        double origin_longitude = -83.9207;
+        double target_latitude  =  38.9072;
+        double target_longitude = -77.0369;
+
         rocket.set_start(origin_latitude, origin_longitude, target_latitude, target_longitude);
-        rocket.set_radius(rocket_radius);
 
         Stage s1 = {
             .id = 1,
@@ -71,6 +75,8 @@ namespace sim {
         rocket.set_stage(2, s2);
         rocket.set_stage(3, s3);
         rocket.set_stage(4, payload);
+
+        rocket.set_radius(0.84);
     }
 
     void Sim::Run() {

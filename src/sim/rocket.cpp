@@ -321,3 +321,12 @@ void Rocket::set_start(double origin_latitude, double origin_longitude, double t
     set_orientation(q);
     init_state.origin_q_eci = q;
 }
+
+
+double Rocket::get_length() const {
+    double len = 0;
+    for (int i = active_idx; i < NUM_STAGES; i++) {
+        len += props.stages[i].tip_to_end_length;
+    }
+    return len;
+}
