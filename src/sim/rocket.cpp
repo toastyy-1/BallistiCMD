@@ -62,6 +62,22 @@ Vec3 Rocket::nose_direction_eci() {
     };
 }
 
+// gravitational acceleration in the ECI frame
+static Vec3 gravity_accel(const Vec3& r) {
+    double r2       = r.dot(r);
+    double r_norm   = std::sqrt(r2);
+    double pm       = -GM_EARTH / (r2 * r_norm);
+
+    double zr2      = (r.z * r.z) / r2;
+    double k        = 1.5 * J2 * (EARTH_RADIUS_M * EARTH_RADIUS_M) / r2;
+
+    return {
+        .x = pm * r.x * (1.0 - k * (5.0 * zr2 - 1.0)),
+        .y = pm * r.y * (1.0 - k * (5.0 * zr2 - 1.0)),
+        .z = pm * r.z * (1.0 - k * (5.0 * zr2 - 3.0)),
+    };
+}
+
 void Rocket::update_dynamics() {
     // rocket mass
     double m = m_current;
@@ -84,7 +100,7 @@ void Rocket::update_dynamics() {
     ////////////////////////////////////
     // gravitional acceleration
     Vec3 k1_r = v;
-    Vec3 k1_rv = r * ((-1) * (GM_EARTH / (r_norm * r_norm * r_norm)));
+    Vec3 k1_rv = gravity_accel(r);
 
     // add engine thrust
     k1_rv += a_thrust;
@@ -95,8 +111,7 @@ void Rocket::update_dynamics() {
     // gravitional acceleration
     Vec3 k2_r = v + k1_rv * (dt / 2);
     Vec3 r2 = r + k1_r * (dt / 2);
-    double r2_norm = r2.norm();
-    Vec3 k2_rv = r2 * ((-1) * (GM_EARTH / (r2_norm * r2_norm * r2_norm)));
+    Vec3 k2_rv = gravity_accel(r2);
 
     // add engine thrust
     k2_rv += a_thrust;
@@ -107,8 +122,7 @@ void Rocket::update_dynamics() {
     // gravitional acceleration
     Vec3 k3_r = v + k2_rv * (dt / 2);
     Vec3 r3 = r + k2_r * (dt / 2);
-    double r3_norm = r3.norm();
-    Vec3 k3_rv = r3 * ((-1) * (GM_EARTH / (r3_norm * r3_norm * r3_norm)));
+    Vec3 k3_rv = gravity_accel(r3);
 
     // add engine thrust
     k3_rv += a_thrust;
@@ -119,8 +133,7 @@ void Rocket::update_dynamics() {
     // gravitional acceleration
     Vec3 k4_r = v + k3_rv * dt;
     Vec3 r4 = r + k3_r * dt;
-    double r4_norm = r4.norm();
-    Vec3 k4_rv = r4 * ((-1) * (GM_EARTH / (r4_norm * r4_norm * r4_norm))); 
+    Vec3 k4_rv = gravity_accel(r4);
 
     // add engine thrust
     k4_rv += a_thrust;
