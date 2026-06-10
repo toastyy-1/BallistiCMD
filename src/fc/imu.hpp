@@ -21,10 +21,6 @@ class IMU {
         return add_noise(sim.get_rocket_ang_vel(), gyr_stddev);
     }
 
-    Vec3 read_IMU_mag() {
-        return add_noise(eci_to_body(mag_field_eci), mag_stddev);
-    }
-
     private:
     const sim::Sim& sim;
     std::mt19937 rng;
@@ -32,9 +28,6 @@ class IMU {
     // nosie for sensors
     double acc_stddev = 0.02;
     double gyr_stddev = 0.001;
-    double mag_stddev = 1.0e-7;
-
-    Vec3 mag_field_eci = {0.0, 0.0, 50.0e-6};
 
     double noise(double val, double stddev) {
         std::normal_distribution<double> dist(0.0, stddev);

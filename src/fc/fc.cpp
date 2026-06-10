@@ -55,11 +55,19 @@ void print_telemetry(const data_store& ds, const control_states& cs) {
         default:               stage = "UNKNOWN"; break;
     }
 
-    std::cout << "\033[1;31m[" << "\033[1;33m" << stage
-              << "\033[1;31m]"
-              << "\033[0;37m  T+" << "\033[1;37m" << std::fixed << std::setprecision(1) << ds.time << "s"
-              << "\033[0;37m  acc=" << "\033[1;36m" << std::setprecision(2) << ds.a.norm() << "m/s²"
-              << "\033[0;37m  gyr=" << "\033[1;36m" << ds.w.norm() << "rad/s"
+    std::cout << std::fixed
+              << "\033[1;31m[" << "\033[1;33m" << stage << "\033[1;31m]"
+              << "\033[0;37m  T+" << "\033[1;37m" << std::setprecision(1) << ds.time << "s"
+              << "\n"
+              << "\033[0;37m  acc(m/s²)  x=" << "\033[1;36m" << std::setw(9) << std::setprecision(4) << ds.a.x
+              << "\033[0;37m  y=" << "\033[1;36m" << std::setw(9) << ds.a.y
+              << "\033[0;37m  z=" << "\033[1;36m" << std::setw(9) << ds.a.z
+              << "\033[0;37m  |a|=" << "\033[1;36m" << std::setw(9) << ds.a.norm()
+              << "\n"
+              << "\033[0;37m  gyr(rad/s) x=" << "\033[1;36m" << std::setw(9) << ds.w.x
+              << "\033[0;37m  y=" << "\033[1;36m" << std::setw(9) << ds.w.y
+              << "\033[0;37m  z=" << "\033[1;36m" << std::setw(9) << ds.w.z
+              << "\033[0;37m  |w|=" << "\033[1;36m" << std::setw(9) << ds.w.norm()
               << "\033[0m\n";
 }
 
@@ -76,7 +84,7 @@ void pull_new_data(const sim::Sim& sim, data_store& ds, IMU& imu) {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 // runs on its own thread alongside the sim
-int flight_controller(sim::Sim& sim) {
+int flight_controller_loop(sim::Sim& sim) {
 
     ////////////////////////////
     // init                   //

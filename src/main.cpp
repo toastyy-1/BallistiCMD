@@ -6,7 +6,7 @@
 int main() {
     sim::Sim s;
     std::thread sim_thread([&]{ s.Run(); });
-    std::thread fc_thread([&]{ flight_controller(s); });
+    std::thread fc_thread([&]{ flight_controller_loop(s); });
 
     renderer::Renderer r(s);
     r.Run();
