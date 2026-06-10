@@ -69,7 +69,7 @@ class Rocket {
     ///////////////////////////////////////////////////////////////////////////////////////////////
     private:
 
-    static constexpr int NUM_STAGES = 4; // stage_1, stage_2, stage_3, payload
+    static constexpr int NUM_STAGES = 3; // stage_1, stage_2, payload
 
     ///////////////////////////////////////////////////////////////////////////////////////////////
     // rocket static configuration                                                               //
@@ -81,7 +81,6 @@ class Rocket {
             { .id = 1 },
             { .id = 2 },
             { .id = 3 },
-            { .id = 4 },
         }};
     };
     Properties props;

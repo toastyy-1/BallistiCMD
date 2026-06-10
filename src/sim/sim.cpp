@@ -47,20 +47,8 @@ namespace sim {
             .engine_gimball_range = 5.0
         };
 
-        Stage s3 = {
-            .id = 3,
-            .m_dry = 545.0,
-            .m_fuel = 3306.0,
-            .m_flow_rate = 54.0,
-            .tip_to_end_length = 2.34,
-            .CM_dist = 1.17,
-            .max_thrust = 152000.0,
-            .engine_distance = 2.34,
-            .engine_gimball_range = 5.0
-        };
-
         Stage payload = {
-            .id = 4,
+            .id = 3,
             .m_dry = 1150.0,
             .m_fuel = 0.0,
             .m_flow_rate = 0.0,
@@ -73,8 +61,7 @@ namespace sim {
 
         rocket.set_stage(1, s1);
         rocket.set_stage(2, s2);
-        rocket.set_stage(3, s3);
-        rocket.set_stage(4, payload);
+        rocket.set_stage(3, payload);
 
         rocket.set_radius(0.84);
     }
