@@ -221,7 +221,7 @@ void Rocket::update_mass() {
     // update per-stage mass
     Stage& s = active();
     if (s.m_fuel > 0 && s.thrust > 0) {
-        double sub = s.m_flow_rate * TIME_STEP;
+        double sub = s.mass_flow_rate() * TIME_STEP;
         if (sub > s.m_fuel) {
             s.m_fuel = 0;
             s.thrust = 0;

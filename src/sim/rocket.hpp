@@ -1,18 +1,22 @@
 #pragma once
 #include "types.hpp"
+#include "constants.hpp"
 #include <array>
 
 struct Stage {
     double id;
     double m_dry;                   // dry mass
     double m_fuel;                  // fuel mass
-    double m_flow_rate;             // mass flow rate from engine (kg/s)
+    double isp;                     // specific impulse (s)
     double tip_to_end_length;       // m
     double CM_dist;                 // dist of center of mass from front edge of the stage
     double max_thrust;              // rated (max) motor thrust
     double thrust;                  // current commanded thrust
     double engine_distance;         // distance of engine from leading edge
     double engine_gimball_range;    // rad
+
+    double exhaust_velocity() const { return isp * g0; }
+    double mass_flow_rate() const { return isp > 0 ? thrust / exhaust_velocity() : 0.0; }
 };
 
 struct InitialStates {
@@ -26,6 +30,8 @@ class Rocket {
     // public                                                                                    //
     ///////////////////////////////////////////////////////////////////////////////////////////////
     public:
+
+    static constexpr int NUM_STAGES = 3; // stage_1, stage_2, payload
 
     // setup
     Rocket();
@@ -41,6 +47,7 @@ class Rocket {
     double get_mass() const { return m_current; }
     double get_fuel_mass() const { return m_fuel_current; }
     double get_active_fuel() const { return active().m_fuel; }
+    const Stage& get_stage(int stage_num) const { return props.stages[stage_num - 1]; }
     bool active_is_powered() const { return active().max_thrust > 0.0; }
     InitialStates get_rocket_initial_states() const { return init_state; }
     double get_radius() const { return props.radius; }
@@ -68,8 +75,6 @@ class Rocket {
     // private                                                                                    //
     ///////////////////////////////////////////////////////////////////////////////////////////////
     private:
-
-    static constexpr int NUM_STAGES = 3; // stage_1, stage_2, payload
 
     ///////////////////////////////////////////////////////////////////////////////////////////////
     // rocket static configuration                                                               //
