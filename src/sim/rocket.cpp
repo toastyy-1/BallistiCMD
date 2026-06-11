@@ -148,7 +148,7 @@ void Rocket::update_dynamics() {
     // apply changes to rocket
     r += delta_r;
     v += delta_v;
-    a = delta_v / dt; // for imu
+    a = delta_v / dt; // for INS
     altitude = r_norm - EARTH_RADIUS_M;
 
     // keep rocket from falling through the earth

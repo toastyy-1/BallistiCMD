@@ -5,19 +5,19 @@
 #include "constants.hpp"
 #include "sim/sim.hpp"
 
-// simulated imu
-class IMU {
+// simulated INS
+class INS {
     public:
-    explicit IMU(const sim::Sim& sim) : sim(sim), rng(94058) {}
+    explicit INS(const sim::Sim& sim) : sim(sim), rng(94058) {}
 
     // gets data from sim and adds noise
-    Vec3 read_IMU_acc() {
+    Vec3 read_INS_acc() {
         Vec3 a_eci = sim.get_rocket_acc();
         Vec3 specific_force_eci = a_eci - gravity_eci(sim.get_rocket_pos());
-        return add_noise(eci_to_body(specific_force_eci), acc_stddev);
+        return add_noise(specific_force_eci, acc_stddev);
     }
 
-    Vec3 read_IMU_gyr() {
+    Vec3 read_INS_gyr() {
         return add_noise(sim.get_rocket_ang_vel(), gyr_stddev);
     }
 
@@ -26,8 +26,8 @@ class IMU {
     std::mt19937 rng;
 
     // nosie for sensors
-    double acc_stddev = 0.02;
-    double gyr_stddev = 0.001;
+    double acc_stddev = 0.001;
+    double gyr_stddev = 0.0001;
 
     double noise(double val, double stddev) {
         std::normal_distribution<double> dist(0.0, stddev);
