@@ -70,6 +70,7 @@ namespace sim {
 
         // configure the rocket for starting settings
         configure_rocket();
+        publish_sim_states();
 
         while (running.load()) {
 
@@ -81,6 +82,13 @@ namespace sim {
                 !!! NOTE !!! THE ROCKET SHOULD NOT BE CONTROLLED FROM HERE AT ALL ASSUMING THE FC IS ACTIVE
             */
 
+            // apply any commands the flight controller posted since the last step
+            if (advance_cmd.exchange(false)) rocket.advance_stage();
+            if (ignite_cmd.exchange(false)) rocket.light_engine();
+            Quat gimbal;
+            { std::lock_guard<std::mutex> lk(mtx); gimbal = gimbal_cmd; }
+            rocket.set_engine_orientation(gimbal);
+
             // update the position, orientation, and mass of the rocket
             rocket.update_mass();
             rocket.update_dynamics();
@@ -89,8 +97,33 @@ namespace sim {
             // increment time step
             t += TIME_STEP;
 
+            // make snapshot for other threads of sim states
+            publish_sim_states();
+
             std::this_thread::sleep_for(std::chrono::duration<double>(0.01));
         }
+    }
+
+    void Sim::publish_sim_states() {
+        State s;
+        s.t             = t;
+        s.r             = rocket.get_pos();
+        s.v             = rocket.get_vel();
+        s.a             = rocket.get_acc();
+        s.w             = rocket.get_ang_vel();
+        s.q_rocket      = rocket.get_orientation();
+        s.q_engine      = rocket.get_engine_orientation();
+        s.mass          = rocket.get_mass();
+        s.fuel          = rocket.get_fuel_mass();
+        s.length        = rocket.get_length();
+        s.cm_dist       = rocket_cm_dist;
+        s.engine_dist   = rocket.get_length();
+        s.radius        = rocket.get_radius();
+        s.init          = rocket.get_rocket_initial_states();
+        for (int i = 1; i <= Rocket::NUM_STAGES; i++) s.stages[i - 1] = rocket.get_stage(i);
+
+        std::lock_guard<std::mutex> lk(mtx);
+        snap = s;
     }
 
 

@@ -1,9 +1,22 @@
 #pragma once
 #include <atomic>
+#include <mutex>
+#include <array>
 #include "types.hpp"
 #include "rocket.hpp"
 
 namespace sim {
+
+    struct State {
+        double t = 0;
+        Vec3 r{}, v{}, a{}, w{};
+        Quat q_rocket{1, 0, 0, 0};
+        Quat q_engine{1, 0, 0, 0};
+        double mass = 0, fuel = 0;
+        double length = 0, cm_dist = 0, engine_dist = 0, radius = 0;
+        InitialStates init{};
+        std::array<Stage, Rocket::NUM_STAGES> stages{};
+    };
 
     class Sim {
     public:
@@ -14,34 +27,28 @@ namespace sim {
         void Stop() { running.store(false); }
         bool is_running() const { return running.load(); }
 
-        Rocket rocket;
+        State get_state() const { std::lock_guard<std::mutex> lk(mtx); return snap; }
 
-        // geter
-        double get_time() const { return t; }
-        Vec3 get_rocket_pos() const { return rocket.get_pos(); }
-        Vec3 get_rocket_vel() const { return rocket.get_vel(); }
-        Vec3 get_rocket_acc() const { return rocket.get_acc(); }
-        Vec3 get_rocket_ang_vel() const { return rocket.get_ang_vel(); }
-        Quat get_rocket_orientation() const { return rocket.get_orientation(); }
-        Quat get_engine_orientation() const { return rocket.get_engine_orientation(); }
-        double get_rocket_mass() const { return rocket.get_mass(); }
-        double get_rocket_fuel() const { return rocket.get_fuel_mass(); }
-
-        // static geometry
-        double get_rocket_length() const { return rocket.get_length(); }
-        double get_rocket_cm_dist() const { return rocket_cm_dist; }
-        double get_engine_distance() const { return rocket.get_length(); }
-        double get_rocket_radius() const { return rocket.get_radius(); }
+        void light_engine() { ignite_cmd.store(true); }
+        bool advance_stage() { advance_cmd.store(true); return true; }
+        void set_engine_orientation(const Quat& q) { std::lock_guard<std::mutex> lk(mtx); gimbal_cmd = q; }
 
     private:
         void configure_rocket();
+        void publish_sim_states();
 
-        double t; // sim time
-        std::atomic<bool>   running{true};
+        Rocket rocket;
 
-        double rocket_length = 11.25;
+        mutable std::mutex mtx;
+        State snap;
+        std::atomic<bool> ignite_cmd{false};
+        std::atomic<bool> advance_cmd{false};
+        Quat gimbal_cmd{1, 0, 0, 0};
+
+        double t = 0;
+        std::atomic<bool> running{true};
+
         double rocket_cm_dist = 5.0;
-        double rocket_engine_dist = 10.5;
     };
 
 }

@@ -20,7 +20,8 @@ Initial_States create_target_trajectory(double lat_target, double long_target, s
     long_target = long_target * M_PI / 180.0;
 
     // derive lat and longitude from starting position of rocket on planet
-    Vec3 p = sim.get_rocket_pos();
+    sim::State st = sim.get_state();
+    Vec3 p = st.r;
     double r = p.norm();
     double lat_origin  = asin(p.z / r);
     double long_origin = atan2(p.y, p.x);
@@ -56,11 +57,10 @@ Initial_States create_target_trajectory(double lat_target, double long_target, s
 
     // stage 1 burnout
     double m0 = 0;
-    for (int i = 1; i <= Rocket::NUM_STAGES; i++) {
-        const Stage& st = sim.rocket.get_stage(i);
-        m0 += st.m_dry + st.m_fuel;
+    for (const Stage& stg : st.stages) {
+        m0 += stg.m_dry + stg.m_fuel;
     }
-    const Stage& s1 = sim.rocket.get_stage(1);
+    const Stage& s1 = st.stages[0];
     double t_burn = s1.m_fuel * s1.exhaust_velocity() / s1.max_thrust;
     double v_s1_bo = s1.exhaust_velocity() * log(m0 / (m0 - s1.m_fuel)) - g0 * t_burn;
     double h_s1_bo = 0.5 * v_s1_bo * t_burn;

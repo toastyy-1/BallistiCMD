@@ -112,7 +112,7 @@ void Renderer::Run() {
     while (!WindowShouldClose()) {
         HandleInput();
         // Sample once per frame so camera, axes, rocket, and Earth all agree.
-        p_ref_eci_ = sim_.get_rocket_pos();
+        p_ref_eci_ = sim_.get_state().r;
         UpdateThrustLevel();
         DrawFrame(BuildCamera());
     }
@@ -122,7 +122,7 @@ void Renderer::UpdateThrustLevel() {
     // Infer engine firing from propellant draw-down: any drop between frames
     // means the motor is lit. Ease the on/off into a level so the plume fades
     // in and out instead of popping.
-    double fuel   = sim_.get_rocket_fuel();
+    double fuel   = sim_.get_state().fuel;
     bool   firing = prevFuel_ >= 0.0 && fuel < prevFuel_ - 1e-9 && fuel > 0.0;
     prevFuel_     = fuel;
     float k = fminf(1.0f, GetFrameTime() * 12.0f);
@@ -203,12 +203,13 @@ void Renderer::DrawRocket() const {
     const Color kBell = {  54,  56,  62, 255 };  // dark nozzle
     const int   kSides = 24;                      // smoother than the old 16
 
-    Quat   qr       = sim_.get_rocket_orientation();
-    Quat   qe       = sim_.get_engine_orientation();
-    double length   = sim_.get_rocket_length();
-    double cm_dist  = sim_.get_rocket_cm_dist();
-    double eng_dist = sim_.get_engine_distance();
-    double radius   = sim_.get_rocket_radius();
+    sim::State st   = sim_.get_state();
+    Quat   qr       = st.q_rocket;
+    Quat   qe       = st.q_engine;
+    double length   = st.length;
+    double cm_dist  = st.cm_dist;
+    double eng_dist = st.engine_dist;
+    double radius   = st.radius;
 
     // Body frame in ECI: bz = nose direction, bx/by span the radial plane.
     Vec3 bz = qrot(qr, {0, 0, 1});
@@ -280,8 +281,9 @@ void Renderer::DrawPredictedTrajectory() const {
         return p * (-GM_EARTH / (rn * rn * rn));
     };
 
-    Vec3 r = sim_.get_rocket_pos();
-    Vec3 v = sim_.get_rocket_vel();
+    sim::State st = sim_.get_state();
+    Vec3 r = st.r;
+    Vec3 v = st.v;
 
     const double dt        = 1.0;     // s per step
     const int    max_steps = 20000;   // path-length cap
@@ -316,7 +318,7 @@ void Renderer::DrawECIAxes() const {
 
 void Renderer::DrawBodyAxes() const {
     // Body triad at the rocket (world origin), scaled with zoom to stay visible.
-    Quat q = sim_.get_rocket_orientation();
+    Quat q = sim_.get_state().q_rocket;
     const float L = dist * 0.08f;
     auto tip = [&](const Vec3& v) {
         return Vector3 { L * float(v.x), L * float(v.z), L * float(v.y) };  // ECI->world swap
@@ -334,7 +336,7 @@ void Renderer::DrawSurfaceMarkers() const {
     // by the globe when it rotates to the far side. Sized with zoom so the pins
     // stay a roughly constant apparent size from the rocket's launch pad out to
     // a full view of the planet.
-    InitialStates init = sim_.rocket.get_rocket_initial_states();
+    InitialStates init = sim_.get_state().init;
 
     const float sphereR = dist * 0.02f;          // marker radius (km, view units)
     const float pinLen  = dist * 0.06f;          // stalk height above the surface
@@ -357,15 +359,16 @@ void Renderer::DrawSurfaceMarkers() const {
 
 void Renderer::DrawTelemetry() const {
     // --- gather raw state (all ECI, SI units) from sim ---
-    Vec3 r = sim_.get_rocket_pos();
-    Vec3 v = sim_.get_rocket_vel();
-    Vec3 a = sim_.get_rocket_acc();
-    Vec3 w = sim_.get_rocket_ang_vel();
-    Quat qr = sim_.get_rocket_orientation();
-    Quat qe = sim_.get_engine_orientation();
-    double t    = sim_.get_time();
-    double mass = sim_.get_rocket_mass();
-    double fuel = sim_.get_rocket_fuel();
+    sim::State st = sim_.get_state();
+    Vec3 r = st.r;
+    Vec3 v = st.v;
+    Vec3 a = st.a;
+    Vec3 w = st.w;
+    Quat qr = st.q_rocket;
+    Quat qe = st.q_engine;
+    double t    = st.t;
+    double mass = st.mass;
+    double fuel = st.fuel;
 
     // --- attitude ---
     double rmag  = r.norm();

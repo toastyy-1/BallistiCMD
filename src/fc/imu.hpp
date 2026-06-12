@@ -8,21 +8,19 @@
 // simulated INS
 class INS {
     public:
-    explicit INS(const sim::Sim& sim) : sim(sim), rng(94058) {}
+    INS() : rng(94058) {}
 
-    // gets data from sim and adds noise
-    Vec3 read_INS_acc() {
-        Vec3 a_eci = sim.get_rocket_acc();
-        Vec3 specific_force_eci = a_eci - gravity_eci(sim.get_rocket_pos());
+    // reads sim states and adds noise
+    Vec3 read_INS_acc(const sim::State& st) {
+        Vec3 specific_force_eci = st.a - gravity_eci(st.r);
         return add_noise(specific_force_eci, acc_stddev);
     }
 
-    Vec3 read_INS_gyr() {
-        return add_noise(sim.get_rocket_ang_vel(), gyr_stddev);
+    Vec3 read_INS_gyr(const sim::State& st) {
+        return add_noise(st.w, gyr_stddev);
     }
 
     private:
-    const sim::Sim& sim;
     std::mt19937 rng;
 
     // nosie for sensors
@@ -47,19 +45,5 @@ class INS {
         double rn = r.norm();
         if (rn < 1.0) return {0.0, 0.0, 0.0};
         return r * (-GM_EARTH / (rn * rn * rn));
-    }
-
-    // rotate an ECI vector into body frame 
-    Vec3 eci_to_body(Vec3 v) const {
-        Quat q = sim.get_rocket_orientation();
-        Quat q_conj = { q.w, -q.x, -q.y, -q.z };
-        return qrot(q_conj, v);
-    }
-
-    // rotate vector v by quaternion q
-    static Vec3 qrot(Quat q, Vec3 v) {
-        Vec3 qv = {q.x, q.y, q.z};
-        Vec3 t = qv.cross(v);
-        return v + t * (2.0 * q.w) + qv.cross(t) * 2.0;
     }
 };

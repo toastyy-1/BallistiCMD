@@ -58,18 +58,19 @@ void print_telemetry(const control_states& cs, const sim::Sim& sim) {
     std::cout << std::fixed << "\033[1;31m[" << "\033[1;33m" << stage << "\033[1;31m]" << "\033[0;37m  T+" << "\033[1;37m" << std::setprecision(1) << cs.time << "s" << "\n" << "\033[0;37m  acc(m/s²)  x=" << "\033[1;36m" << std::setw(9) << std::setprecision(4) << cs.a.x << "\033[0;37m  y=" << "\033[1;36m" << std::setw(9) << cs.a.y<< "\033[0;37m  z=" << "\033[1;36m" << std::setw(9) << cs.a.z<< "\033[0;37m  |a|=" << "\033[1;36m" << std::setw(9) << cs.a.norm()<< "\n"<< "\033[0;37m  gyr(rad/s) x=" << "\033[1;36m" << std::setw(9) << cs.w.x<< "\033[0;37m  y=" << "\033[1;36m" << std::setw(9) << cs.w.y<< "\033[0;37m  z=" << "\033[1;36m" << std::setw(9) << cs.w.z<< "\033[0;37m  |w|=" << "\033[1;36m" << std::setw(9) << cs.w.norm()<< "\033[0m\n";
     static std::ofstream csv = [] { bool has_data = std::ifstream("fc_telem.csv").peek() != std::ifstream::traits_type::eof(); std::ofstream f("fc_telem.csv", std::ios::app); if (!has_data) {f << "time,stage,r_x,r_y,r_z,v_x,v_y,v_z,a_x,a_y,a_z,w_x,w_y,w_z\n";} return f;}();
     csv << std::fixed << std::setprecision(6) << cs.time << ',' << stage << ',' << cs.r.x << ',' << cs.r.y << ',' << cs.r.z << ',' << cs.v.x << ',' << cs.v.y << ',' << cs.v.z << ',' << cs.a.x << ',' << cs.a.y << ',' << cs.a.z << ',' << cs.w.x << ',' << cs.w.y << ',' << cs.w.z << '\n';
-    Vec3 sr = sim.get_rocket_pos(), sv = sim.get_rocket_vel(), sa = sim.get_rocket_acc(), sw = sim.get_rocket_ang_vel();
+    sim::State sst = sim.get_state();
+    Vec3 sr = sst.r, sv = sst.v, sa = sst.a, sw = sst.w;
     static std::ofstream sim_csv = [] { bool has_data = std::ifstream("sim_telem.csv").peek() != std::ifstream::traits_type::eof(); std::ofstream f("sim_telem.csv", std::ios::app); if (!has_data) {f << "time,stage,r_x,r_y,r_z,v_x,v_y,v_z,a_x,a_y,a_z,w_x,w_y,w_z\n";} return f;}();
     sim_csv << std::fixed << std::setprecision(6) << cs.time << ',' << stage << ',' << sr.x << ',' << sr.y << ',' << sr.z << ',' << sv.x << ',' << sv.y << ',' << sv.z << ',' << sa.x << ',' << sa.y << ',' << sa.z << ',' << sw.x << ',' << sw.y << ',' << sw.z << '\n';
 }
 
 // aquires new data from the sim
 void pull_new_data(const sim::Sim& sim, control_states& cs, INS& ins) {
-    cs.a_inertial = ins.read_INS_acc();
-    cs.w = ins.read_INS_gyr();
-    double actual_sim_time = sim.get_time();
-    cs.dt = actual_sim_time - cs.time;
-    cs.time = actual_sim_time; // this must happen after cs.dt or else cs.dt will be 0 :)
+    sim::State st = sim.get_state();
+    cs.a_inertial = ins.read_INS_acc(st);
+    cs.w = ins.read_INS_gyr(st);
+    cs.dt = st.t - cs.time;
+    cs.time = st.t; // this must happen after cs.dt or else cs.dt will be 0 :)
 }
 
 // estimate state of the rocket in flight at the current moment
@@ -98,8 +99,7 @@ int flight_controller_loop(sim::Sim& sim) {
     ////////////////////////////
     // init                   //
     ////////////////////////////
-    INS ins(sim);
-    Rocket& r = sim.rocket;
+    INS ins;
     control_states cs = {};
         cs.stage = STANDBY;
         cs.is = create_target_trajectory(38.9072, -77.0369, sim);
@@ -112,7 +112,7 @@ int flight_controller_loop(sim::Sim& sim) {
     // control loop           //
     ////////////////////////////
     int tick = 0;
-    cs.time = sim.get_time(); // take initial time measurement
+    cs.time = sim.get_state().t; // take initial time measurement
     while (sim.is_running()) {
         // get data from the INS
         pull_new_data(sim, cs, ins);
@@ -130,29 +130,29 @@ int flight_controller_loop(sim::Sim& sim) {
         case STAGE_1_POWERED: {
             static bool engine_lit = false;
             if (!engine_lit) {
-                r.light_engine();
+                sim.light_engine();
                 engine_lit = true;
             }
 
             static double start = cs.time;
             static bool is_separated = false;
             if (cs.time - start > 130 && !is_separated) {
-                r.advance_stage();
+                sim.advance_stage();
                 is_separated = true;
-                r.light_engine();
+                sim.light_engine();
             }
 
             const double turn_time = 3.0;
             static double turn_time_start = cs.time;
             if ((cs.time - turn_time_start) < turn_time) {
                 double half = (0.3 * M_PI / 180.0) / 2.0;
-                r.set_engine_orientation( {std::cos(half), 0.0, std::sin(half), 0.0} );
+                sim.set_engine_orientation( {std::cos(half), 0.0, std::sin(half), 0.0} );
             }
             else if ((cs.time - turn_time_start) < 2.0 * turn_time) {
                 double half = (-0.3 * M_PI / 180.0) / 2.0;
-                r.set_engine_orientation( {std::cos(half), 0.0, std::sin(half), 0.0} );
+                sim.set_engine_orientation( {std::cos(half), 0.0, std::sin(half), 0.0} );
             }
-            else r.set_engine_orientation({1, 0, 0, 0});
+            else sim.set_engine_orientation({1, 0, 0, 0});
             break;
         }
         case STAGE_2_UNPOWERED:
