@@ -186,6 +186,10 @@ void Renderer::DrawRocket() const {
     f.firing  = thrust_ > 0.02f;
     f.thrust  = thrust_;
     f.flick   = 0.82f + 0.12f*sinf(t*46.0f) + 0.06f*sinf(t*71.0f + 1.7f);
+    // Atmospheric density factor (~8km scale height): drives Mach diamonds, which
+    // only form in atmosphere (over/under-expanded nozzle), not in vacuum.
+    double altitude = st.r.norm() - EARTH_RADIUS_M;
+    f.air     = (float)exp(-fmax(altitude, 0.0) / 8000.0);
     f.nozzle  = ToView(nozzle_eci);
     f.exhaust_dir = rvDir(-thrust_eci);
 

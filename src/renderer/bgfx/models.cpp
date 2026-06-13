@@ -121,15 +121,26 @@ void RocketModel::buildHullBell(RenderBackend& b) {
     const float nose_base = nose_z - noseLen;
     const float tail_z   = cm - L;
 
-    Mesh hull;
+    // PBR params (metallic, roughness) are packed into vertex UVs per part.
+    auto setMR = [](Mesh& m, size_t from, float metal, float rough) {
+        for (size_t i = from; i < m.verts.size(); ++i) { m.verts[i].u = metal; m.verts[i].v = rough; }
+    };
 
-    // Main body.
+    Mesh hull;
+    size_t k;
+
+    // Main body — brushed metal (low roughness = shinier fuselage).
+    k = hull.verts.size();
     geom::appendFrustum(hull, tail_z, nose_base, radius, radius, kSides, kBody);
+    setMR(hull, k, 0.85f, 0.22f);
+
     // Thin collar where the nose meets the body.
+    k = hull.verts.size();
     geom::appendFrustum(hull, nose_base - radius * 0.18f, nose_base,
                         radius * 1.03f, radius, kSides, kCollar, false, false);
+    setMR(hull, k, 0.80f, 0.45f);
 
-    // Smoothed (elliptical) nose, revolved from a fixed-shape profile.
+    // Smoothed (elliptical) nose — painted dielectric.
     std::vector<RVec3> prof;
     const int NS = 22;
     for (int i = 0; i <= NS; ++i) {
@@ -138,7 +149,9 @@ void RocketModel::buildHullBell(RenderBackend& b) {
         float r = radius * sqrtf(fmaxf(0.0f, 1.0f - t * t));
         prof.push_back({ z, r, 0 });
     }
+    k = hull.verts.size();
     geom::appendRevolve(hull, prof, kSides, kNose, /*capBase=*/true);
+    setMR(hull, k, 0.05f, 0.5f);
 
     // Tail fins: only on the booster (first) stage, as solid swept 3D wedges.
     if (firstStage_) {
@@ -149,17 +162,20 @@ void RocketModel::buildHullBell(RenderBackend& b) {
         const float tipBotZ  = tail_z - L * 0.06f;
         const float halfThk  = radius * 0.06f;
         const RVec3 rads[4] = { {1,0,0}, {0,1,0}, {-1,0,0}, {0,-1,0} };
+        k = hull.verts.size();
         for (const RVec3& rad : rads) {
             RVec3 tng = { -rad.y, rad.x, 0 };           // in-plane perpendicular
             appendFin(hull, rad, tng, radius, span, rootTopZ, rootBotZ, tipTopZ, tipBotZ, halfThk, kFin);
         }
+        setMR(hull, k, 0.65f, 0.45f);
     }
     hull_ = b.CreateMesh(hull);
 
     // Engine bell: open, fluted nozzle in the gimbal-pivot frame (throat at z=0,
-    // exit 1.6 m down). Throat narrow, flaring to a wide ridged exit.
+    // exit 1.6 m down). Throat narrow, flaring to a wide ridged exit. Dark, rough metal.
     Mesh bell;
     appendBell(bell, 0.0f, -1.6f, radius * 0.45f, radius * 1.25f, kSides, 20, 0.05f, kBell);
+    setMR(bell, 0, 0.55f, 0.55f);
     bell_ = b.CreateMesh(bell);
 }
 
@@ -186,6 +202,29 @@ void RocketModel::Draw(RenderBackend& b, const RocketFrame& f) const {
     cone(radius * 1.5,  Lm * 1.25, { 180,  70, 20,  90 });   // outer haze
     cone(radius * 1.0,  Lm,        { 255, 140, 40, 140 });   // flame body
     cone(radius * 0.55, Lm * 0.6,  { 255, 235, 180, 210 });  // white-hot core
+    cone(radius * 0.30, Lm * 0.32, { 205, 225, 255, 220 });  // blue-white inner jet
+
+    // Mach diamonds: periodic shock nodes along the supersonic exhaust. They form
+    // only in atmosphere (over/under-expanded nozzle), so fade with altitude
+    // (f.air) and down the plume. In vacuum (f.air -> 0) they vanish.
+    if (f.air > 0.12f) {
+        const int   nD      = 5;
+        const float spacing = (float)(radius * 1.7) * (0.15f + 0.5f * (1.0f - f.air));  // metres
+        for (int k = 1; k <= nD; ++k) {
+            float dist = spacing * k;
+            if (dist > Lm * 0.95) break;
+            float fade = 1.0f - (float)(k - 1) / nD;
+            float br   = f.air * f.thrust * fade;
+            RVec3 c = { f.nozzle.x + f.exhaust_dir.x * (float)(dist * M_TO_KM),
+                        f.nozzle.y + f.exhaust_dir.y * (float)(dist * M_TO_KM),
+                        f.nozzle.z + f.exhaust_dir.z * (float)(dist * M_TO_KM) };
+            float sz = (float)(radius * 0.45 * M_TO_KM) * (0.6f + 0.4f * fade);
+            Material d;
+            d.color = { 215, 230, 255, (unsigned char)(220.0f * br) };
+            d.blend = BlendMode::Additive; d.depth_write = false;
+            b.DrawModel(sphere_, rmath::placeSphere(c, sz), d);
+        }
+    }
 
     // Nozzle glow.
     const float radiusW = (float)(radius * M_TO_KM);

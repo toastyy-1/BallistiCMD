@@ -65,9 +65,11 @@ private:
     bgfx::ProgramHandle cloudProg_ = BGFX_INVALID_HANDLE;
     bgfx::ProgramHandle atmosProg_ = BGFX_INVALID_HANDLE;
     bgfx::ProgramHandle flareProg_ = BGFX_INVALID_HANDLE;
+    bgfx::ProgramHandle rocketProg_ = BGFX_INVALID_HANDLE;   // PBR + grime (lit DrawModel)
     bgfx::UniformHandle s_tex_ = BGFX_INVALID_HANDLE, u_tint_ = BGFX_INVALID_HANDLE,
                         u_depth_ = BGFX_INVALID_HANDLE, u_light_ = BGFX_INVALID_HANDLE;
     RVec3 sunDirView_ { 0, 0, 1 };   // cached each frame from DrawEarth, for lit DrawModel
+    RVec3 camPosView_ { 0, 0, 0 };   // cached camera position, for the PBR view vector
     bgfx::UniformHandle s_color_ = BGFX_INVALID_HANDLE, s_bump_ = BGFX_INVALID_HANDLE,
                         s_night_ = BGFX_INVALID_HANDLE;
     bgfx::UniformHandle u_sunDir_ = BGFX_INVALID_HANDLE, u_earthCenter_ = BGFX_INVALID_HANDLE,

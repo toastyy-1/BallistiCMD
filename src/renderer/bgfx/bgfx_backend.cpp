@@ -113,6 +113,8 @@ void BgfxBackend::Init(int width, int height, const char* title) {
                                      loadShaderFile("src/renderer/bgfx/shaders/fs_atmos.bin"), true);
     flareProg_ = bgfx::createProgram(loadShaderFile("src/renderer/bgfx/shaders/vs_flare.bin"),
                                      loadShaderFile("src/renderer/bgfx/shaders/fs_flare.bin"), true);
+    rocketProg_ = bgfx::createProgram(loadShaderFile("src/renderer/bgfx/shaders/vs_rocket.bin"),
+                                      loadShaderFile("src/renderer/bgfx/shaders/fs_rocket.bin"), true);
 
     s_tex_         = bgfx::createUniform("s_tex",        bgfx::UniformType::Sampler);
     u_tint_        = bgfx::createUniform("u_tint",       bgfx::UniformType::Vec4);
@@ -153,6 +155,7 @@ void BgfxBackend::Shutdown() {
     if (bgfx::isValid(cloudProg_))  bgfx::destroy(cloudProg_);
     if (bgfx::isValid(atmosProg_))  bgfx::destroy(atmosProg_);
     if (bgfx::isValid(flareProg_))  bgfx::destroy(flareProg_);
+    if (bgfx::isValid(rocketProg_)) bgfx::destroy(rocketProg_);
     for (bgfx::UniformHandle u : { s_tex_, u_tint_, u_depth_, u_light_, s_color_, s_bump_, s_night_,
                                    u_sunDir_, u_earthCenter_, u_camPos_, u_dispScale_,
                                    s_cloud_, u_cloudAlpha_, u_cloudDisp_, u_atmos_,
@@ -276,9 +279,14 @@ void BgfxBackend::DrawModel(MeshHandle h, const RMat4& model, const Material& ma
     bgfx::setUniform(u_tint_, tint);
     float depth[4] = { far_, 0, 0, 0 };
     bgfx::setUniform(u_depth_, depth);
-    // Per-material sun lighting (rocket); flat/unlit otherwise (lines, plume, 2D).
+    // Lit materials (the rocket) go through the PBR + grime program; everything
+    // else (lines, plume, markers, 2D) uses the flat generic program.
     float light[4] = { sunDirView_.x, sunDirView_.y, sunDirView_.z, mat.lit ? 1.0f : 0.0f };
     bgfx::setUniform(u_light_, light);
+    if (mat.lit) {
+        float cam[4] = { camPosView_.x, camPosView_.y, camPosView_.z, 0 };
+        bgfx::setUniform(u_camPos_, cam);
+    }
     bgfx::setTexture(0, s_tex_, mat.texture ? textures_[mat.texture - 1] : white_);
 
     uint64_t state = BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_DEPTH_TEST_LESS;
@@ -290,7 +298,7 @@ void BgfxBackend::DrawModel(MeshHandle h, const RMat4& model, const Material& ma
         if (mat.cull) state |= BGFX_STATE_CULL_CW;   // closed solids; off for open bell / fins
     }
     bgfx::setState(state);
-    bgfx::submit(0, generic_);
+    bgfx::submit(0, mat.lit ? rocketProg_ : generic_);
 }
 
 void BgfxBackend::DrawLines(const LineVertex* v, size_t count, float /*width*/) {
@@ -354,6 +362,7 @@ void BgfxBackend::DrawEarth(const EarthFrame& f) {
     if (earthMesh_ == 0) return;
     const GpuMesh& g = meshes_[earthMesh_ - 1];
     sunDirView_ = f.sun_dir;   // cache for lit DrawModel (the rocket), drawn later
+    camPosView_ = f.cam_pos;
 
     // Atmosphere FIRST: full-screen analytic single scattering, drawn before the
     // opaque earth so the earth's real (displaced) silhouette overwrites the inner

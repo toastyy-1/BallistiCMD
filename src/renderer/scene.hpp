@@ -28,6 +28,7 @@ struct RocketFrame {
     bool  firing;          // plume visible
     float thrust;          // [0,1] plume intensity
     float flick;           // flame flicker multiplier
+    float air;             // [0,1] atmospheric density (1 = sea level, 0 = vacuum)
     RVec3 nozzle;          // bell exit, view space (km)
     RVec3 exhaust_dir;     // unit direction the plume travels, view space
 };
