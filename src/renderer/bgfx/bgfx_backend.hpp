@@ -74,7 +74,7 @@ private:
     RVec3 heatDir_    { 0, 0, 1 };   // cached from DrawRocket: travel dir for the heating glow
     float heatAmt_    = 0.0f;        // cached aerodynamic-heating intensity
     bgfx::UniformHandle s_color_ = BGFX_INVALID_HANDLE, s_bump_ = BGFX_INVALID_HANDLE,
-                        s_night_ = BGFX_INVALID_HANDLE;
+                        s_night_ = BGFX_INVALID_HANDLE, s_rough_ = BGFX_INVALID_HANDLE;
     bgfx::UniformHandle u_sunDir_ = BGFX_INVALID_HANDLE, u_earthCenter_ = BGFX_INVALID_HANDLE,
                         u_camPos_ = BGFX_INVALID_HANDLE, u_dispScale_ = BGFX_INVALID_HANDLE,
                         u_heat_ = BGFX_INVALID_HANDLE;
@@ -94,7 +94,8 @@ private:
     bgfx::TextureHandle earthColor_ = BGFX_INVALID_HANDLE,
                         earthBump_  = BGFX_INVALID_HANDLE,
                         earthNight_ = BGFX_INVALID_HANDLE,
-                        earthCloud_ = BGFX_INVALID_HANDLE;
+                        earthCloud_ = BGFX_INVALID_HANDLE,
+                        earthRough_ = BGFX_INVALID_HANDLE;
 
     // 3D view (view 0) state.
     float near_ = 0.01f, far_ = 1000.0f;

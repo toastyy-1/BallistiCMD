@@ -5,6 +5,7 @@ $input v_texcoord0, v_wpos
 SAMPLER2D(s_color, 0);   // daytime albedo
 SAMPLER2D(s_bump,  1);   // height / relief
 SAMPLER2D(s_night, 2);   // city lights
+SAMPLER2D(s_rough, 3);   // roughness (low over water -> glossy ocean glint)
 uniform vec4 u_sunDir;       // xyz: view-space direction TO the sun
 uniform vec4 u_earthCenter;  // xyz: view-space sphere centre (km)
 uniform vec4 u_camPos;       // xyz: view-space camera (km)
@@ -34,6 +35,23 @@ void main() {
     float t      = smoothstep(-0.15, 0.15, term);        // 0 = night .. 1 = day
 
     vec3  day = albedo * (0.15 + 0.85*lit);
+
+    // PBR specular (Cook-Torrance GGX): the roughness map makes oceans glossy
+    // (sharp sun glint) and land matte. F0 ~ 0.02 (dielectric water).
+    float rough = clamp(1.0 - texture2D(s_rough, v_texcoord0).x, 0.2, 1.0);
+    vec3  H   = normalize(L + V);
+    float NdH = max(dot(Np, H), 0.0);
+    float NdV = max(dot(Np, V), 1e-4);
+    float NdL = max(dot(Np, L), 0.0);
+    float VdH = max(dot(V, H), 0.0);
+    float a = rough * rough, a2 = a * a;
+    float Dg = a2 / (3.14159265 * pow(NdH*NdH*(a2 - 1.0) + 1.0, 2.0));
+    float kk = a * 0.5;
+    float Gg = (NdV/(NdV*(1.0 - kk) + kk)) * (NdL/(NdL*(1.0 - kk) + kk));
+    float Fr = 0.02 + 0.98 * pow(1.0 - VdH, 5.0);
+    float spec = Dg * Gg * Fr / (4.0 * NdV * NdL + 1e-4);
+    day += vec3(1.0, 0.97, 0.90) * (spec * NdL * 2.2);   // ocean sun glint
+
     float rim = pow(1.0 - max(dot(N, V), 0.0), 3.0);     // atmospheric limb glow
     day += vec3(0.30, 0.50, 0.95) * rim * (0.35 + 0.65*max(term, 0.0));
 

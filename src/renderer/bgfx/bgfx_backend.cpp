@@ -126,6 +126,7 @@ void BgfxBackend::Init(int width, int height, const char* title) {
     s_color_       = bgfx::createUniform("s_color",      bgfx::UniformType::Sampler);
     s_bump_        = bgfx::createUniform("s_bump",       bgfx::UniformType::Sampler);
     s_night_       = bgfx::createUniform("s_night",      bgfx::UniformType::Sampler);
+    s_rough_       = bgfx::createUniform("s_rough",      bgfx::UniformType::Sampler);
     u_sunDir_      = bgfx::createUniform("u_sunDir",     bgfx::UniformType::Vec4);
     u_earthCenter_ = bgfx::createUniform("u_earthCenter",bgfx::UniformType::Vec4);
     u_camPos_      = bgfx::createUniform("u_camPos",     bgfx::UniformType::Vec4);
@@ -152,6 +153,7 @@ void BgfxBackend::Shutdown() {
     if (bgfx::isValid(earthBump_))  bgfx::destroy(earthBump_);
     if (bgfx::isValid(earthNight_)) bgfx::destroy(earthNight_);
     if (bgfx::isValid(earthCloud_)) bgfx::destroy(earthCloud_);
+    if (bgfx::isValid(earthRough_)) bgfx::destroy(earthRough_);
     if (bgfx::isValid(white_))      bgfx::destroy(white_);
     if (bgfx::isValid(generic_))    bgfx::destroy(generic_);
     if (bgfx::isValid(earthProg_))  bgfx::destroy(earthProg_);
@@ -160,7 +162,7 @@ void BgfxBackend::Shutdown() {
     if (bgfx::isValid(flareProg_))  bgfx::destroy(flareProg_);
     if (bgfx::isValid(rocketProg_)) bgfx::destroy(rocketProg_);
     if (bgfx::isValid(heatProg_))   bgfx::destroy(heatProg_);
-    for (bgfx::UniformHandle u : { s_tex_, u_tint_, u_depth_, u_light_, u_heat_, s_color_, s_bump_, s_night_,
+    for (bgfx::UniformHandle u : { s_tex_, u_tint_, u_depth_, u_light_, u_heat_, s_color_, s_bump_, s_night_, s_rough_,
                                    u_sunDir_, u_earthCenter_, u_camPos_, u_dispScale_,
                                    s_cloud_, u_cloudAlpha_, u_cloudDisp_, u_atmos_,
                                    u_rayFwd_, u_rayRight_, u_rayUp_ })
@@ -362,6 +364,7 @@ void BgfxBackend::ensureEarth() {
     earthBump_  = loadDDS("src/renderer/bgfx/Earth-Bump-Map-32768x16384.dds");
     earthNight_ = loadDDS("src/renderer/bgfx/Earth-Night-Map-32768x16384.dds");
     earthCloud_ = loadDDS("src/renderer/bgfx/Earth-Cloud-Map-32768x16384.dds");
+    earthRough_ = loadDDS("src/renderer/bgfx/Earth-Roughness-Map-32768x16384.dds");
 
     // Sphere for the cloud shells. Denser than a plain textured sphere would need
     // so the per-vertex noise displacement resolves smoothly. 32-bit indices.
@@ -422,6 +425,7 @@ void BgfxBackend::DrawEarth(const EarthFrame& f) {
     bgfx::setTexture(0, s_color_, earthColor_);
     bgfx::setTexture(1, s_bump_,  earthBump_);   // also read by the vertex shader
     bgfx::setTexture(2, s_night_, earthNight_);
+    bgfx::setTexture(3, s_rough_, earthRough_);
 
     bgfx::setTransform(f.model.m);
     bgfx::setVertexBuffer(0, g.vbh);
