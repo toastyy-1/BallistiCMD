@@ -72,6 +72,8 @@ private:
                         u_camPos_ = BGFX_INVALID_HANDLE, u_dispScale_ = BGFX_INVALID_HANDLE;
     bgfx::UniformHandle s_cloud_ = BGFX_INVALID_HANDLE, u_cloudAlpha_ = BGFX_INVALID_HANDLE,
                         u_cloudDisp_ = BGFX_INVALID_HANDLE, u_atmos_ = BGFX_INVALID_HANDLE;
+    bgfx::UniformHandle u_rayFwd_ = BGFX_INVALID_HANDLE, u_rayRight_ = BGFX_INVALID_HANDLE,
+                        u_rayUp_ = BGFX_INVALID_HANDLE;
     bgfx::TextureHandle white_ = BGFX_INVALID_HANDLE;
 
     std::vector<GpuMesh>             meshes_;    // handle = index + 1

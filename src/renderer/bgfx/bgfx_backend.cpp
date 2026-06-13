@@ -126,6 +126,9 @@ void BgfxBackend::Init(int width, int height, const char* title) {
     u_cloudAlpha_  = bgfx::createUniform("u_cloudAlpha", bgfx::UniformType::Vec4);
     u_cloudDisp_   = bgfx::createUniform("u_cloudDisp",  bgfx::UniformType::Vec4);
     u_atmos_       = bgfx::createUniform("u_atmos",      bgfx::UniformType::Vec4);
+    u_rayFwd_      = bgfx::createUniform("u_rayFwd",     bgfx::UniformType::Vec4);
+    u_rayRight_    = bgfx::createUniform("u_rayRight",   bgfx::UniformType::Vec4);
+    u_rayUp_       = bgfx::createUniform("u_rayUp",      bgfx::UniformType::Vec4);
 
     const uint8_t whitePix[4] = { 255, 255, 255, 255 };
     white_ = bgfx::createTexture2D(1, 1, false, 1, bgfx::TextureFormat::RGBA8, 0,
@@ -148,7 +151,8 @@ void BgfxBackend::Shutdown() {
     if (bgfx::isValid(atmosProg_))  bgfx::destroy(atmosProg_);
     for (bgfx::UniformHandle u : { s_tex_, u_tint_, u_depth_, s_color_, s_bump_, s_night_,
                                    u_sunDir_, u_earthCenter_, u_camPos_, u_dispScale_,
-                                   s_cloud_, u_cloudAlpha_, u_cloudDisp_, u_atmos_ })
+                                   s_cloud_, u_cloudAlpha_, u_cloudDisp_, u_atmos_,
+                                   u_rayFwd_, u_rayRight_, u_rayUp_ })
         if (bgfx::isValid(u)) bgfx::destroy(u);
     bgfx::shutdown();
     if (window_) glfwDestroyWindow(window_);
@@ -340,10 +344,47 @@ void BgfxBackend::DrawEarth(const EarthFrame& f) {
     if (earthMesh_ == 0) return;
     const GpuMesh& g = meshes_[earthMesh_ - 1];
 
+    // Atmosphere FIRST: full-screen analytic single scattering, drawn before the
+    // opaque earth so the earth's real (displaced) silhouette overwrites the inner
+    // part. That keeps the limb glow exactly at the visible edge and hides the
+    // sphere-clip discontinuity behind the planet -- no false horizon floating in
+    // the disk. For each pixel we reconstruct the view ray, intersect the
+    // atmosphere/planet spheres, and integrate Rayleigh+Mie in front of the planet,
+    // so it is correct from any altitude.
+    if (bgfx::getAvailTransientVertexBuffer(3, layout_) >= 3) {
+        RVec3 fwd   = rmath::normalize(rmath::sub(cam_.target, cam_.position));
+        RVec3 right = rmath::normalize(rmath::cross(fwd, cam_.up));
+        RVec3 up    = rmath::cross(right, fwd);
+        float tanH  = tanf(cam_.fovy * 0.5f * (float)(M_PI / 180.0));
+        float aspect = height_ > 0 ? (float)width_ / (float)height_ : 1.0f;
+
+        setVec4(u_camPos_, f.cam_pos);
+        setVec4(u_earthCenter_, f.center);
+        setVec4(u_sunDir_, f.sun_dir);
+        // x: planet radius, y: atmosphere radius, z: scale height, w: exposure (km).
+        float at[4] = { (float)EARTH_RADIUS_KM, (float)EARTH_RADIUS_KM + 110.0f, 22.0f, 0.03f };
+        bgfx::setUniform(u_atmos_, at);
+        setVec4(u_rayFwd_, fwd);
+        float rr[4] = { right.x*tanH*aspect, right.y*tanH*aspect, right.z*tanH*aspect, 0 };
+        bgfx::setUniform(u_rayRight_, rr);
+        float ru[4] = { up.x*tanH, up.y*tanH, up.z*tanH, 0 };
+        bgfx::setUniform(u_rayUp_, ru);
+
+        bgfx::TransientVertexBuffer tvb;
+        bgfx::allocTransientVertexBuffer(&tvb, 3, layout_);
+        Vertex* d = (Vertex*)tvb.data;
+        d[0] = Vertex{ { -1, -1, 0 }, {0,0,0}, 0, 0, kWhite };   // full-screen triangle
+        d[1] = Vertex{ {  3, -1, 0 }, {0,0,0}, 0, 0, kWhite };
+        d[2] = Vertex{ { -1,  3, 0 }, {0,0,0}, 0, 0, kWhite };
+        bgfx::setVertexBuffer(0, &tvb);
+        bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_BLEND_ADD);
+        bgfx::submit(0, atmosProg_);
+    }
+
     setVec4(u_sunDir_,      f.sun_dir);
     setVec4(u_earthCenter_, f.center);
     setVec4(u_camPos_,      f.cam_pos);
-    float disp[4] = { 80000.0f, 0, 0, 0 };   // metres of height exaggeration
+    float disp[4] = { 50000.0f, 0, 0, 0 };   // metres of height exaggeration
     bgfx::setUniform(u_dispScale_, disp);
     float depth[4] = { far_, 0, 0, 0 };
     bgfx::setUniform(u_depth_, depth);
@@ -388,27 +429,6 @@ void BgfxBackend::DrawEarth(const EarthFrame& f) {
                            | BGFX_STATE_DEPTH_TEST_LESS | BGFX_STATE_BLEND_ALPHA | BGFX_STATE_CULL_CW);
             bgfx::submit(0, cloudProg_);
         }
-    }
-
-    // Atmosphere: a single shell larger than the planet, additively blended. The
-    // fragment shader turns the view ray's impact parameter into a blue limb glow
-    // that fades softly into space (and a thin haze just inside the disk edge).
-    if (cloudMesh_) {
-        const float atmFactor = 1.035f;
-        const GpuMesh& am = meshes_[cloudMesh_ - 1];
-        RMat4 m = rmath::mul(f.model, rmath::scale(atmFactor));
-        setVec4(u_sunDir_, f.sun_dir);
-        setVec4(u_earthCenter_, f.center);
-        setVec4(u_camPos_, f.cam_pos);
-        float at[4] = { (float)EARTH_RADIUS_KM, (float)EARTH_RADIUS_KM * atmFactor, 70.0f, 10.0f };
-        bgfx::setUniform(u_atmos_, at);
-        bgfx::setUniform(u_depth_, depth);
-        bgfx::setTransform(m.m);
-        bgfx::setVertexBuffer(0, am.vbh);
-        bgfx::setIndexBuffer(am.ibh);
-        bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A
-                       | BGFX_STATE_DEPTH_TEST_LESS | BGFX_STATE_BLEND_ADD | BGFX_STATE_CULL_CW);
-        bgfx::submit(0, atmosProg_);
     }
 }
 
