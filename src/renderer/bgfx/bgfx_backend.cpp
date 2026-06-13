@@ -110,6 +110,7 @@ void BgfxBackend::Init(int width, int height, const char* title) {
 
     s_tex_         = bgfx::createUniform("s_tex",        bgfx::UniformType::Sampler);
     u_tint_        = bgfx::createUniform("u_tint",       bgfx::UniformType::Vec4);
+    u_depth_       = bgfx::createUniform("u_depth",      bgfx::UniformType::Vec4);
     s_color_       = bgfx::createUniform("s_color",      bgfx::UniformType::Sampler);
     s_bump_        = bgfx::createUniform("s_bump",       bgfx::UniformType::Sampler);
     s_night_       = bgfx::createUniform("s_night",      bgfx::UniformType::Sampler);
@@ -134,7 +135,7 @@ void BgfxBackend::Shutdown() {
     if (bgfx::isValid(white_))      bgfx::destroy(white_);
     if (bgfx::isValid(generic_))    bgfx::destroy(generic_);
     if (bgfx::isValid(earthProg_))  bgfx::destroy(earthProg_);
-    for (bgfx::UniformHandle u : { s_tex_, u_tint_, s_color_, s_bump_, s_night_,
+    for (bgfx::UniformHandle u : { s_tex_, u_tint_, u_depth_, s_color_, s_bump_, s_night_,
                                    u_sunDir_, u_earthCenter_, u_camPos_, u_dispScale_ })
         if (bgfx::isValid(u)) bgfx::destroy(u);
     bgfx::shutdown();
@@ -253,11 +254,17 @@ void BgfxBackend::DrawModel(MeshHandle h, const RMat4& model, const Material& ma
     bgfx::setIndexBuffer(g.ibh);
     float tint[4] = { mat.color.r / 255.0f, mat.color.g / 255.0f, mat.color.b / 255.0f, mat.color.a / 255.0f };
     bgfx::setUniform(u_tint_, tint);
+    float depth[4] = { far_, 0, 0, 0 };
+    bgfx::setUniform(u_depth_, depth);
     bgfx::setTexture(0, s_tex_, mat.texture ? textures_[mat.texture - 1] : white_);
 
     uint64_t state = BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_DEPTH_TEST_LESS;
     if (mat.depth_write) state |= BGFX_STATE_WRITE_Z;
-    state |= (mat.blend == BlendMode::Additive) ? BGFX_STATE_BLEND_ADD : BGFX_STATE_BLEND_ALPHA;
+    if (mat.blend == BlendMode::Additive) {
+        state |= BGFX_STATE_BLEND_ADD;          // plume: both sides, no cull
+    } else {
+        state |= BGFX_STATE_BLEND_ALPHA | BGFX_STATE_CULL_CW;  // opaque: cull back faces
+    }
     bgfx::setState(state);
     bgfx::submit(0, generic_);
 }
@@ -275,6 +282,8 @@ void BgfxBackend::DrawLines(const LineVertex* v, size_t count, float /*width*/) 
     bgfx::setVertexBuffer(0, &tvb);
     float tint[4] = { 1, 1, 1, 1 };
     bgfx::setUniform(u_tint_, tint);
+    float depth[4] = { far_, 0, 0, 0 };
+    bgfx::setUniform(u_depth_, depth);
     bgfx::setTexture(0, s_tex_, white_);
     bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_WRITE_Z
                    | BGFX_STATE_DEPTH_TEST_LESS | BGFX_STATE_PT_LINES);
@@ -319,6 +328,8 @@ void BgfxBackend::DrawEarth(const EarthFrame& f) {
     setVec4(u_camPos_,      f.cam_pos);
     float disp[4] = { 80000.0f, 0, 0, 0 };   // metres of height exaggeration
     bgfx::setUniform(u_dispScale_, disp);
+    float depth[4] = { far_, 0, 0, 0 };
+    bgfx::setUniform(u_depth_, depth);
     bgfx::setTexture(0, s_color_, earthColor_);
     bgfx::setTexture(1, s_bump_,  earthBump_);   // also read by the vertex shader
     bgfx::setTexture(2, s_night_, earthNight_);
@@ -327,7 +338,7 @@ void BgfxBackend::DrawEarth(const EarthFrame& f) {
     bgfx::setVertexBuffer(0, g.vbh);
     bgfx::setIndexBuffer(g.ibh);
     bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_WRITE_Z
-                   | BGFX_STATE_DEPTH_TEST_LESS);
+                   | BGFX_STATE_DEPTH_TEST_LESS | BGFX_STATE_CULL_CW);
     bgfx::submit(0, earthProg_);
 }
 
@@ -343,6 +354,8 @@ void BgfxBackend::submit2DTris(const Vertex* v, uint32_t count, RColor tint) {
     bgfx::setVertexBuffer(0, &tvb);
     float t[4] = { tint.r / 255.0f, tint.g / 255.0f, tint.b / 255.0f, tint.a / 255.0f };
     bgfx::setUniform(u_tint_, t);
+    float depth[4] = { far_, 0, 0, 0 };   // unused by 2D (no depth test) but keeps u_depth defined
+    bgfx::setUniform(u_depth_, depth);
     bgfx::setTexture(0, s_tex_, white_);
     bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_BLEND_ALPHA);
     bgfx::submit(1, generic_);
