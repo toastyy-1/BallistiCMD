@@ -107,6 +107,8 @@ void BgfxBackend::Init(int width, int height, const char* title) {
                                      loadShaderFile("src/renderer/bgfx/shaders/fs_generic.bin"), true);
     earthProg_ = bgfx::createProgram(loadShaderFile("src/renderer/bgfx/shaders/vs_earth.bin"),
                                      loadShaderFile("src/renderer/bgfx/shaders/fs_earth.bin"), true);
+    cloudProg_ = bgfx::createProgram(loadShaderFile("src/renderer/bgfx/shaders/vs_cloud.bin"),
+                                     loadShaderFile("src/renderer/bgfx/shaders/fs_cloud.bin"), true);
 
     s_tex_         = bgfx::createUniform("s_tex",        bgfx::UniformType::Sampler);
     u_tint_        = bgfx::createUniform("u_tint",       bgfx::UniformType::Vec4);
@@ -118,6 +120,9 @@ void BgfxBackend::Init(int width, int height, const char* title) {
     u_earthCenter_ = bgfx::createUniform("u_earthCenter",bgfx::UniformType::Vec4);
     u_camPos_      = bgfx::createUniform("u_camPos",     bgfx::UniformType::Vec4);
     u_dispScale_   = bgfx::createUniform("u_dispScale",  bgfx::UniformType::Vec4);
+    s_cloud_       = bgfx::createUniform("s_cloud",      bgfx::UniformType::Sampler);
+    u_cloudAlpha_  = bgfx::createUniform("u_cloudAlpha", bgfx::UniformType::Vec4);
+    u_cloudDisp_   = bgfx::createUniform("u_cloudDisp",  bgfx::UniformType::Vec4);
 
     const uint8_t whitePix[4] = { 255, 255, 255, 255 };
     white_ = bgfx::createTexture2D(1, 1, false, 1, bgfx::TextureFormat::RGBA8, 0,
@@ -132,11 +137,14 @@ void BgfxBackend::Shutdown() {
     if (bgfx::isValid(earthColor_)) bgfx::destroy(earthColor_);
     if (bgfx::isValid(earthBump_))  bgfx::destroy(earthBump_);
     if (bgfx::isValid(earthNight_)) bgfx::destroy(earthNight_);
+    if (bgfx::isValid(earthCloud_)) bgfx::destroy(earthCloud_);
     if (bgfx::isValid(white_))      bgfx::destroy(white_);
     if (bgfx::isValid(generic_))    bgfx::destroy(generic_);
     if (bgfx::isValid(earthProg_))  bgfx::destroy(earthProg_);
+    if (bgfx::isValid(cloudProg_))  bgfx::destroy(cloudProg_);
     for (bgfx::UniformHandle u : { s_tex_, u_tint_, u_depth_, s_color_, s_bump_, s_night_,
-                                   u_sunDir_, u_earthCenter_, u_camPos_, u_dispScale_ })
+                                   u_sunDir_, u_earthCenter_, u_camPos_, u_dispScale_,
+                                   s_cloud_, u_cloudAlpha_, u_cloudDisp_ })
         if (bgfx::isValid(u)) bgfx::destroy(u);
     bgfx::shutdown();
     if (window_) glfwDestroyWindow(window_);
@@ -316,6 +324,11 @@ void BgfxBackend::ensureEarth() {
     earthColor_ = loadDDS("src/renderer/bgfx/Earth-Color-Map-32768x16384.dds");
     earthBump_  = loadDDS("src/renderer/bgfx/Earth-Bump-Map-32768x16384.dds");
     earthNight_ = loadDDS("src/renderer/bgfx/Earth-Night-Map-32768x16384.dds");
+    earthCloud_ = loadDDS("src/renderer/bgfx/Earth-Cloud-Map-32768x16384.dds");
+
+    // Sphere for the cloud shells. Denser than a plain textured sphere would need
+    // so the per-vertex noise displacement resolves smoothly. 32-bit indices.
+    cloudMesh_  = CreateMesh(geom::buildSphere((float)EARTH_RADIUS_M, 512, 512, kLonOffset));
 }
 
 void BgfxBackend::DrawEarth(const EarthFrame& f) {
@@ -340,6 +353,38 @@ void BgfxBackend::DrawEarth(const EarthFrame& f) {
     bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_WRITE_Z
                    | BGFX_STATE_DEPTH_TEST_LESS | BGFX_STATE_CULL_CW);
     bgfx::submit(0, earthProg_);
+
+    // Cloud shells: concentric cloud-map layers above the terrain. Drawn
+    // inner->outer (back-to-front for the visible near hemisphere) with depth
+    // test on (mountains occlude clouds) but no depth write (shells blend). The
+    // slight radius offsets give a parallax / volumetric feel as the camera moves.
+    if (cloudMesh_) {
+        const GpuMesh& cm  = meshes_[cloudMesh_ - 1];
+        const int   kShells    = 5;
+        const float baseKm     = 25.0f;   // lowest shell altitude
+        const float gapKm      = 5.0f;    // spacing between shells
+        const float shellAlpha = 0.35f;   // per-shell opacity (x cloud density)
+        const float dispAmp    = 15000.0f; // noise amplitude (m); ~> gap so shells merge
+        const float dispFreq   = 10.0f;    // noise feature scale over the sphere
+        for (int i = 0; i < kShells; ++i) {
+            float factor = 1.0f + ((baseKm + i * gapKm) * 1000.0f) / (float)EARTH_RADIUS_M;
+            RMat4 m = rmath::mul(f.model, rmath::scale(factor));
+            setVec4(u_sunDir_, f.sun_dir);
+            setVec4(u_earthCenter_, f.center);
+            float ca[4] = { shellAlpha, 0, 0, 0 };
+            bgfx::setUniform(u_cloudAlpha_, ca);
+            float cd[4] = { dispAmp, dispFreq, i * 17.0f, 0 };   // per-shell seed
+            bgfx::setUniform(u_cloudDisp_, cd);
+            bgfx::setUniform(u_depth_, depth);
+            bgfx::setTexture(0, s_cloud_, earthCloud_);
+            bgfx::setTransform(m.m);
+            bgfx::setVertexBuffer(0, cm.vbh);
+            bgfx::setIndexBuffer(cm.ibh);
+            bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A
+                           | BGFX_STATE_DEPTH_TEST_LESS | BGFX_STATE_BLEND_ALPHA | BGFX_STATE_CULL_CW);
+            bgfx::submit(0, cloudProg_);
+        }
+    }
 }
 
 // --- 2D overlay (view 1) ----------------------------------------------------

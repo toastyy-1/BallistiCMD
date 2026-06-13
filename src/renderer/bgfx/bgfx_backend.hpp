@@ -62,12 +62,15 @@ private:
     bgfx::VertexLayout  layout_;
     bgfx::ProgramHandle generic_ = BGFX_INVALID_HANDLE;
     bgfx::ProgramHandle earthProg_ = BGFX_INVALID_HANDLE;
+    bgfx::ProgramHandle cloudProg_ = BGFX_INVALID_HANDLE;
     bgfx::UniformHandle s_tex_ = BGFX_INVALID_HANDLE, u_tint_ = BGFX_INVALID_HANDLE,
                         u_depth_ = BGFX_INVALID_HANDLE;
     bgfx::UniformHandle s_color_ = BGFX_INVALID_HANDLE, s_bump_ = BGFX_INVALID_HANDLE,
                         s_night_ = BGFX_INVALID_HANDLE;
     bgfx::UniformHandle u_sunDir_ = BGFX_INVALID_HANDLE, u_earthCenter_ = BGFX_INVALID_HANDLE,
                         u_camPos_ = BGFX_INVALID_HANDLE, u_dispScale_ = BGFX_INVALID_HANDLE;
+    bgfx::UniformHandle s_cloud_ = BGFX_INVALID_HANDLE, u_cloudAlpha_ = BGFX_INVALID_HANDLE,
+                        u_cloudDisp_ = BGFX_INVALID_HANDLE;
     bgfx::TextureHandle white_ = BGFX_INVALID_HANDLE;
 
     std::vector<GpuMesh>             meshes_;    // handle = index + 1
@@ -76,9 +79,11 @@ private:
     // Backend-owned scene objects.
     RocketModel         rocket_;
     MeshHandle          earthMesh_ = 0;
+    MeshHandle          cloudMesh_ = 0;
     bgfx::TextureHandle earthColor_ = BGFX_INVALID_HANDLE,
                         earthBump_  = BGFX_INVALID_HANDLE,
-                        earthNight_ = BGFX_INVALID_HANDLE;
+                        earthNight_ = BGFX_INVALID_HANDLE,
+                        earthCloud_ = BGFX_INVALID_HANDLE;
 
     // 3D view (view 0) state.
     float near_ = 0.01f, far_ = 1000.0f;
