@@ -19,6 +19,7 @@ private:
     void buildHullBell(RenderBackend& b);
 
     RocketDims dims_{};
+    bool       firstStage_ = true;   // fins only on the booster (first) stage
     MeshHandle hull_   = 0;
     MeshHandle bell_   = 0;
     MeshHandle cone_   = 0;   // unit cone, for the plume

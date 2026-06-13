@@ -41,6 +41,7 @@ struct Material {
     bool          lit         = false;
     BlendMode     blend       = BlendMode::Alpha;
     bool          depth_write = true;
+    bool          cull        = true;   // back-face cull (off for open/thin geometry)
     TextureHandle texture     = 0;
 };
 

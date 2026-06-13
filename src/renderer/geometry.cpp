@@ -69,6 +69,38 @@ void appendTriangle(Mesh& m, const RVec3& a, const RVec3& b, const RVec3& c,
     }
 }
 
+void appendRevolve(Mesh& m, const std::vector<RVec3>& profile,
+                   int sides, RColor col, bool capBase) {
+    const int rings = (int)profile.size();
+    if (rings < 2) return;
+    uint32_t base = (uint32_t)m.verts.size();
+    const int stride = sides + 1;
+
+    for (int i = 0; i < rings; ++i) {
+        float z = profile[i].x, r = profile[i].y;
+        // Profile slope for the (radial) normal, central-differenced.
+        float dz, dr;
+        if (i == 0)            { dz = profile[1].x - profile[0].x;       dr = profile[1].y - profile[0].y; }
+        else if (i == rings-1) { dz = profile[i].x - profile[i-1].x;     dr = profile[i].y - profile[i-1].y; }
+        else                   { dz = profile[i+1].x - profile[i-1].x;   dr = profile[i+1].y - profile[i-1].y; }
+        for (int j = 0; j <= sides; ++j) {
+            float a = (float)(TAU * j / sides), c = cosf(a), s = sinf(a);
+            RVec3 nrm = rmath::normalize({ dz*c, dz*s, -dr });
+            m.verts.push_back({ {r*c, r*s, z}, nrm, 0, 0, col });
+        }
+    }
+    for (int i = 0; i < rings - 1; ++i) {
+        for (int j = 0; j < sides; ++j) {
+            uint32_t a = base + i*stride + j,     b = a + 1;
+            uint32_t c = base + (i+1)*stride + j, d = c + 1;
+            m.idx.push_back(a); m.idx.push_back(b); m.idx.push_back(d);
+            m.idx.push_back(a); m.idx.push_back(d); m.idx.push_back(c);
+        }
+    }
+    if (capBase && profile[0].y > 1e-6f)
+        appendCap(m, profile[0].x, profile[0].y, sides, -1.0f, col);
+}
+
 Mesh buildCone(int sides) {
     Mesh m;
     appendFrustum(m, 0.0f, 1.0f, 1.0f, 0.0f, sides, kWhite, /*cap0=*/true, /*cap1=*/false);

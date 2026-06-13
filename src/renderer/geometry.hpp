@@ -19,6 +19,12 @@ void appendFrustum(Mesh& m, float z0, float z1, float r0, float r1,
 void appendTriangle(Mesh& m, const RVec3& a, const RVec3& b, const RVec3& c,
                     RColor col, bool doubleSided = false);
 
+// Surface of revolution around +Z. `profile` is an ordered list of points with
+// x = axial z (increasing) and y = radius; revolved into `sides` segments with
+// smooth normals from the profile slope. Used for the rounded nose cone.
+void appendRevolve(Mesh& m, const std::vector<RVec3>& profile,
+                   int sides, RColor col, bool capBase = true);
+
 // Unit cone: base circle radius 1 in the z=0 plane, apex at z=1. Recoloured per
 // draw via Material; used (scaled/oriented) for the exhaust plume.
 Mesh buildCone(int sides);
