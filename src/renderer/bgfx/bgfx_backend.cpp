@@ -407,7 +407,9 @@ void BgfxBackend::DrawEarth(const EarthFrame& f) {
         setVec4(u_earthCenter_, f.center);
         setVec4(u_sunDir_, f.sun_dir);
         // x: planet radius, y: atmosphere radius, z: scale height, w: exposure (km).
-        float at[4] = { (float)EARTH_RADIUS_KM, (float)EARTH_RADIUS_KM + 110.0f, 22.0f, 0.03f };
+        // y: Kármán line (~100 km). z: Rayleigh scale height (~8.5 km). w: exposure
+        // (raised to compensate for the thinner, denser-falloff air column).
+        float at[4] = { (float)EARTH_RADIUS_KM, (float)EARTH_RADIUS_KM + 100.0f, 8.5f, 0.05f };
         bgfx::setUniform(u_atmos_, at);
         setVec4(u_rayFwd_, fwd);
         float rr[4] = { right.x*tanH*aspect, right.y*tanH*aspect, right.z*tanH*aspect, 0 };
@@ -429,7 +431,7 @@ void BgfxBackend::DrawEarth(const EarthFrame& f) {
     setVec4(u_sunDir_,      f.sun_dir);
     setVec4(u_earthCenter_, f.center);
     setVec4(u_camPos_,      f.cam_pos);
-    float disp[4] = { 50000.0f, 0, 0, 0 };   // metres of height exaggeration
+    float disp[4] = { 8849.0f, 0, 0, 0 };    // true scale: Everest above sea level (m)
     bgfx::setUniform(u_dispScale_, disp);
     float depth[4] = { far_, 0, 0, 0 };
     bgfx::setUniform(u_depth_, depth);
@@ -453,10 +455,12 @@ void BgfxBackend::DrawEarth(const EarthFrame& f) {
     if (cloudMesh_) {
         const GpuMesh& cm  = meshes_[cloudMesh_ - 1];
         const int   kShells    = 5;
-        const float baseKm     = 25.0f;   // lowest shell altitude
-        const float gapKm      = 5.0f;    // spacing between shells
-        const float shellAlpha = 0.35f;   // per-shell opacity (x cloud density)
-        const float dispAmp    = 15000.0f; // noise amplitude (m); ~> gap so shells merge
+        const float baseKm     = 2.0f;    // cloud base ~2 km (low cumulus)
+        const float gapKm      = 2.5f;    // shells span 2..12 km -> tops at the tropopause
+        const float shellAlpha = 0.22f;   // per-shell opacity; thin enough that the
+                                          // co-located ground shadow shows through
+                                          // (keep in sync with fs_earth's shadow curve)
+        const float dispAmp    = 3000.0f; // noise amplitude (m); ~> gap so shells merge
         const float dispFreq   = 10.0f;    // noise feature scale over the sphere
         for (int i = 0; i < kShells; ++i) {
             float factor = 1.0f + ((baseKm + i * gapKm) * 1000.0f) / (float)EARTH_RADIUS_M;

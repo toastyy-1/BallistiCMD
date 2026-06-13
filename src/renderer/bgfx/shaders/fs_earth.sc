@@ -42,21 +42,23 @@ void main() {
     // at the cloud altitude gives the correct offset (longer shadows at low sun),
     // so the shadow falls beside the cloud instead of hiding under it.
     vec3  ocC = v_wpos - u_earthCenter.xyz;
-    float Rc  = length(ocC) + 220.0;                         // exaggerated cloud altitude so
-    float bC  = dot(ocC, L);                                 // the shadow clears the cloud it
-    float tc  = -bC + sqrt(max(bC*bC - (dot(ocC, ocC) - Rc*Rc), 0.0));  // is cast from
+    float Rc  = length(ocC) + 7.0;                          // ~7 km: mid-troposphere cloud deck
+    float bC  = dot(ocC, L);                                // (km, matching the rendered shells)
+    float tc  = -bC + sqrt(max(bC*bC - (dot(ocC, ocC) - Rc*Rc), 0.0));
     vec3  cp  = normalize((v_wpos + L*tc) - u_earthCenter.xyz);
     vec3  ce  = vec3(cp.x, -cp.z, cp.y);                     // view -> ECI
     vec2  cuv = vec2(atan(ce.y, ce.x) * (0.5/3.14159265) + 12.0/360.0,
                      acos(clamp(ce.z, -1.0, 1.0)) / 3.14159265);
-    // Match the cloud's apparent opacity: it is drawn as 5 shells at alpha 0.35,
-    // so its coverage follows 1-(1-0.35*c)^5, which lifts faint texels into
-    // visible cloud. Sampling linearly here only darkened the dense core, leaving
-    // a small cutout in the middle; mirroring the shell accumulation makes the
-    // shadow cover the cloud's full footprint (every non-black texel casts it).
+    // Match the cloud's apparent opacity: it is drawn as 5 shells at alpha 0.22
+    // (keep this in sync with shellAlpha in bgfx_backend.cpp), so its coverage
+    // follows 1-(1-0.22*c)^5, which lifts faint texels into visible cloud and makes
+    // the shadow cover the cloud's full footprint (every non-black texel casts it).
+    // The gate only fades the shadow across the terminator into the night side; it
+    // is kept tight (0..0.05) so low-sun shadows -- which stretch out to the side
+    // and are the ones actually visible from orbit -- are not cut off.
     float c       = clamp(texture2D(s_cloud, cuv).x, 0.0, 1.0);
-    float cloudSh = 1.0 - pow(1.0 - 0.35 * c, 5.0);
-    day *= 1.0 - 0.7 * cloudSh * smoothstep(0.0, 0.10, term);
+    float cloudSh = 1.0 - pow(1.0 - 0.22 * c, 5.0);
+    day *= 1.0 - 0.85 * cloudSh * smoothstep(0.0, 0.05, term);
 
     // PBR specular (Cook-Torrance GGX): the roughness map makes oceans glossy
     // (sharp sun glint) and land matte. F0 ~ 0.02 (dielectric water).
