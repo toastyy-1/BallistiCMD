@@ -1,4 +1,5 @@
 #include "renderer.hpp"
+#include "geometry.hpp"
 #include "../sim/sim.hpp"
 #include <cmath>
 #include <cstdio>
@@ -57,9 +58,7 @@ const char* fmt(const char* f, ...) {
 Renderer::Renderer(RenderBackend& backend, const sim::Sim& s)
     : backend_(backend), sim_(s) {
     backend_.Init(1920, 1080, "Missile Program");
-    sim::State st = sim_.get_state();
-    rocket_.Build(backend_, { st.length, st.cm_dist, st.radius, st.engine_dist });
-    earth_.Build(backend_);
+    markerSphere_ = backend_.CreateMesh(geom::buildSphere(1.0f, 16, 24));
 }
 
 Renderer::~Renderer() {
@@ -148,19 +147,20 @@ void Renderer::DrawEarth(const RCamera& cam, RVec3 earthC) {
     // Earth mesh is in ECI metres (+Z = north); place it at the shifted centre
     // and apply the metre->km view basis. The differencing for earthC happened
     // in double inside ToView, so float precision is fine from here on.
-    RMat4 model = rmath::mul(rmath::translate(earthC), rmath::viewBasis((float)M_TO_KM));
-    earth_.Draw(backend_, model, sun, earthC, cam.position);
+    EarthFrame f;
+    f.model   = rmath::mul(rmath::translate(earthC), rmath::viewBasis((float)M_TO_KM));
+    f.sun_dir = sun;
+    f.center  = earthC;
+    f.cam_pos = cam.position;
+    backend_.DrawEarth(f);
 }
 
-void Renderer::DrawRocket() {
+void Renderer::DrawRocket() const {
     sim::State st = sim_.get_state();
     Quat   qr       = st.q_rocket;
     Quat   qe       = st.q_engine;
     double cm_dist  = st.cm_dist;
     double eng_dist = st.engine_dist;
-
-    // Staging shortens the stack; rebuild the hull/bell if the dimensions moved.
-    rocket_.Update(backend_, { st.length, st.cm_dist, st.radius, st.engine_dist });
 
     // Body axis (nose) and gimballed thrust direction, in ECI.
     Vec3 bz         = qrot(qr, {0, 0, 1});
@@ -176,6 +176,7 @@ void Renderer::DrawRocket() {
     RMat4 Rqe = rmath::fromQuat(qe.w, qe.x, qe.y, qe.z);
 
     RocketFrame f;
+    f.dims = { st.length, st.cm_dist, st.radius, st.engine_dist };
     f.hull = rmath::mul(pv, rmath::mul(V, Rqr));
     // Bell pivots (gimbal) about the engine attach point in the body frame.
     f.bell = rmath::mul(pv, rmath::mul(V, rmath::mul(Rqr,
@@ -188,7 +189,7 @@ void Renderer::DrawRocket() {
     f.nozzle  = ToView(nozzle_eci);
     f.exhaust_dir = rvDir(-thrust_eci);
 
-    rocket_.Draw(backend_, f);
+    backend_.DrawRocket(f);
 }
 
 void Renderer::DrawPredictedTrajectory() const {
@@ -276,7 +277,7 @@ void Renderer::DrawSurfaceMarkers() const {
         stalks.push_back({ baseW, c });
         stalks.push_back({ tipW,  c });
         Material m; m.color = c;
-        backend_.DrawModel(rocket_.unitSphere(), rmath::placeSphere(tipW, sphereR), m);
+        backend_.DrawModel(markerSphere_, rmath::placeSphere(tipW, sphereR), m);
     };
 
     pin(init.origin_r_eci, kGreen);   // launch origin

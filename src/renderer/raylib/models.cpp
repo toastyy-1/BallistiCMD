@@ -1,6 +1,6 @@
 #include "models.hpp"
-#include "geometry.hpp"
-#include "../constants.hpp"
+#include "../geometry.hpp"
+#include "../../constants.hpp"
 
 namespace renderer {
 
@@ -8,19 +8,19 @@ namespace {
 constexpr int kSides = 24;   // hull/bell facet count (smoother than the old 16)
 }
 
-void RocketModel::Build(RenderBackend& b, const RocketDims& dims) {
-    dims_ = dims;
-    cone_   = b.CreateMesh(geom::buildCone(kSides));
-    sphere_ = b.CreateMesh(geom::buildSphere(1.0f, 16, 24));
-    buildHullBell(b);
-}
-
-void RocketModel::Update(RenderBackend& b, const RocketDims& dims) {
+void RocketModel::Ensure(RenderBackend& b, const RocketDims& dims) {
+    if (cone_ == 0) {   // first use: build the dimension-independent meshes too
+        cone_   = b.CreateMesh(geom::buildCone(kSides));
+        sphere_ = b.CreateMesh(geom::buildSphere(1.0f, 16, 24));
+        dims_   = dims;
+        buildHullBell(b);
+        return;
+    }
     if (dims.length == dims_.length && dims.cm_dist == dims_.cm_dist &&
         dims.radius == dims_.radius && dims.engine_dist == dims_.engine_dist)
         return;
     dims_ = dims;
-    buildHullBell(b);
+    buildHullBell(b);   // staging shortened the stack; rebuild hull + bell
 }
 
 void RocketModel::buildHullBell(RenderBackend& b) {
@@ -56,9 +56,9 @@ void RocketModel::buildHullBell(RenderBackend& b) {
     const float finOut  = radius * 2.4f;
     const RVec3 rads[4] = { {1,0,0}, {0,1,0}, {-1,0,0}, {0,-1,0} };
     for (const RVec3& rad : rads) {
-        RVec3 a = { rad.x*radius,          rad.y*radius,          tail_z + finUp };
+        RVec3 a  = { rad.x*radius,          rad.y*radius,          tail_z + finUp };
         RVec3 bb = { rad.x*radius,          rad.y*radius,          tail_z };
-        RVec3 c = { rad.x*(radius+finOut), rad.y*(radius+finOut), tail_z - finBack };
+        RVec3 c  = { rad.x*(radius+finOut), rad.y*(radius+finOut), tail_z - finBack };
         geom::appendTriangle(hull, a, bb, c, kFin, /*doubleSided=*/true);
     }
     hull_ = b.CreateMesh(hull);
@@ -99,20 +99,6 @@ void RocketModel::Draw(RenderBackend& b, const RocketFrame& f) const {
     g.color = { 255, 190, 90, (unsigned char)(150 * f.thrust) };
     g.blend = BlendMode::Additive; g.depth_write = false;
     b.DrawModel(sphere_, rmath::placeSphere(f.nozzle, radiusW * (0.7f + 0.2f * f.flick)), g);
-}
-
-void EarthModel::Build(RenderBackend& b) {
-    // Sphere in metres (radius EARTH_RADIUS_M) so the renderer's view basis
-    // (metres -> km) applies to it like everything else. The 12 deg east offset
-    // matches the texture alignment the raylib backend used.
-    const float kLonOffset = 12.0f / 360.0f;
-    mesh_ = b.CreateMesh(geom::buildSphere((float)EARTH_RADIUS_M, 128, 128, kLonOffset));
-    tex_  = b.LoadTexture("src/renderer/world.jpg");
-}
-
-void EarthModel::Draw(RenderBackend& b, const RMat4& model, const RVec3& sun_dir,
-                      const RVec3& earth_center, const RVec3& cam_pos) const {
-    b.DrawEarth(mesh_, tex_, model, sun_dir, earth_center, cam_pos);
 }
 
 }

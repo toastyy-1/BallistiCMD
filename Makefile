@@ -1,6 +1,6 @@
 CXX      := g++
 CXXFLAGS := -std=c++20 -Wall -Wpedantic -Isrc -pthread -O3 -march=native -flto -funroll-loops
-SRCS     := src/main.cpp src/renderer/renderer.cpp src/sim/sim.cpp src/sim/rocket.cpp src/fc/fc.cpp
+SRCS     := src/main.cpp src/renderer/renderer.cpp src/renderer/raylib/raylib_backend.cpp src/renderer/raylib/models.cpp src/renderer/geometry.cpp src/sim/sim.cpp src/sim/rocket.cpp src/fc/fc.cpp
 TARGET   := program
 
 ifeq ($(OS),Windows_NT)

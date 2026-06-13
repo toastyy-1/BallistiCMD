@@ -1,4 +1,5 @@
 #include "raylib_backend.hpp"
+#include "../geometry.hpp"
 #include "../../constants.hpp"
 #include <raymath.h>
 #include <rlgl.h>
@@ -184,16 +185,29 @@ void RaylibBackend::DrawLines(const LineVertex* v, size_t count, float width) {
         ::DrawLine3D(toRl(v[i].pos), toRl(v[i + 1].pos), toRl(v[i].color));
 }
 
-void RaylibBackend::DrawEarth(MeshHandle sphere, TextureHandle tex, const RMat4& model,
-                              const RVec3& sun_dir, const RVec3& earth_center,
-                              const RVec3& cam_pos) {
-    if (sphere == 0 || sphere > meshes_.size()) return;
-    Vector3 sun = toRl(sun_dir), c = toRl(earth_center), cam = toRl(cam_pos);
+void RaylibBackend::DrawRocket(const RocketFrame& f) {
+    rocket_.Ensure(*this, f.dims);   // build on first use, rebuild on staging
+    rocket_.Draw(*this, f);
+}
+
+void RaylibBackend::ensureEarth() {
+    if (earthMesh_) return;
+    // Sphere in metres (radius EARTH_RADIUS_M) so the renderer's view basis
+    // (metres -> km) applies to it like everything else. The 12 deg east offset
+    // matches the texture alignment.
+    const float kLonOffset = 12.0f / 360.0f;
+    earthMesh_ = CreateMesh(geom::buildSphere((float)EARTH_RADIUS_M, 128, 128, kLonOffset));
+    earthTex_  = LoadTexture("src/renderer/raylib/world.jpg");
+}
+
+void RaylibBackend::DrawEarth(const EarthFrame& f) {
+    ensureEarth();
+    Vector3 sun = toRl(f.sun_dir), c = toRl(f.center), cam = toRl(f.cam_pos);
     SetShaderValue(earthShader_, sunDirLoc_,      &sun, SHADER_UNIFORM_VEC3);
     SetShaderValue(earthShader_, earthCenterLoc_, &c,   SHADER_UNIFORM_VEC3);
     SetShaderValue(earthShader_, camPosLoc_,      &cam, SHADER_UNIFORM_VEC3);
-    earthMat_.maps[MATERIAL_MAP_DIFFUSE].texture = tex ? textures_[tex - 1] : defaultTex_;
-    DrawMesh(meshes_[sphere - 1], earthMat_, toRl(model));
+    earthMat_.maps[MATERIAL_MAP_DIFFUSE].texture = textures_[earthTex_ - 1];
+    DrawMesh(meshes_[earthMesh_ - 1], earthMat_, toRl(f.model));
 }
 
 void RaylibBackend::DrawRect(int x, int y, int w, int h, RColor c) {

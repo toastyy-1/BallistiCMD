@@ -1,21 +1,12 @@
 #pragma once
 
-// Backend-neutral value types shared by the render interface, the geometry
-// builders, and the math helpers. Kept in its own header so rmath.hpp and
-// mesh.hpp can pull in the primitives (RVec3/RColor/...) without depending on
-// the full RenderBackend interface (which in turn depends on them).
-
 namespace renderer {
 
-// View-space position, float (km after the rocket-centred shift; see
-// Renderer::ToView). Deliberately not a raylib Vector3 so this header pulls in
-// no backend dependency.
+// View-space position, float (km after the rocket-centred shift.)
 struct RVec3 { float x, y, z; };
 
 struct RColor { unsigned char r, g, b, a; };
 
-// Perspective camera. (Every backend here renders perspective; add a flag if an
-// orthographic mode is ever needed.)
 struct RCamera {
     RVec3 position;
     RVec3 target;
@@ -33,8 +24,7 @@ struct FrameInput {
 enum class BlendMode { Alpha, Additive };
 
 // --- palette ----------------------------------------------------------------
-// Mirrors the raylib named colours the renderer used, so the visual output is
-// unchanged. Backend-neutral so they live with the rest of the render types.
+// Raylib colours
 inline constexpr RColor kBlack   {   0,   0,   0, 255 };
 inline constexpr RColor kWhite   { 255, 255, 255, 255 };
 inline constexpr RColor kGray    { 130, 130, 130, 255 };
