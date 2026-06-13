@@ -23,7 +23,7 @@ void main() {
     // Lit on the day side, fading through the terminator into night.
     vec3  N   = normalize(v_wpos - u_earthCenter.xyz);
     float day = smoothstep(-0.25, 0.25, dot(N, normalize(u_sunDir.xyz)));
-    float intensity = glow * (0.12 + 0.88 * day);
+    float intensity = glow * (0.12 + 0.88 * day) * 0.45;   // overall subtlety
 
     vec3 col = vec3(0.33, 0.55, 1.0);                // Rayleigh-ish blue
     gl_FragColor = vec4(col * intensity, intensity); // additive

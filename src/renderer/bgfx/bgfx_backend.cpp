@@ -400,7 +400,7 @@ void BgfxBackend::DrawEarth(const EarthFrame& f) {
         setVec4(u_sunDir_, f.sun_dir);
         setVec4(u_earthCenter_, f.center);
         setVec4(u_camPos_, f.cam_pos);
-        float at[4] = { (float)EARTH_RADIUS_KM, (float)EARTH_RADIUS_KM * atmFactor, 45.0f, 150.0f };
+        float at[4] = { (float)EARTH_RADIUS_KM, (float)EARTH_RADIUS_KM * atmFactor, 70.0f, 10.0f };
         bgfx::setUniform(u_atmos_, at);
         bgfx::setUniform(u_depth_, depth);
         bgfx::setTransform(m.m);
