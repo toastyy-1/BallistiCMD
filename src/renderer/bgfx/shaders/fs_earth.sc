@@ -49,7 +49,13 @@ void main() {
     vec3  ce  = vec3(cp.x, -cp.z, cp.y);                     // view -> ECI
     vec2  cuv = vec2(atan(ce.y, ce.x) * (0.5/3.14159265) + 12.0/360.0,
                      acos(clamp(ce.z, -1.0, 1.0)) / 3.14159265);
-    float cloudSh = clamp(texture2D(s_cloud, cuv).x * 1.4, 0.0, 1.0);
+    // Match the cloud's apparent opacity: it is drawn as 5 shells at alpha 0.35,
+    // so its coverage follows 1-(1-0.35*c)^5, which lifts faint texels into
+    // visible cloud. Sampling linearly here only darkened the dense core, leaving
+    // a small cutout in the middle; mirroring the shell accumulation makes the
+    // shadow cover the cloud's full footprint (every non-black texel casts it).
+    float c       = clamp(texture2D(s_cloud, cuv).x, 0.0, 1.0);
+    float cloudSh = 1.0 - pow(1.0 - 0.35 * c, 5.0);
     day *= 1.0 - 0.7 * cloudSh * smoothstep(0.0, 0.10, term);
 
     // PBR specular (Cook-Torrance GGX): the roughness map makes oceans glossy
