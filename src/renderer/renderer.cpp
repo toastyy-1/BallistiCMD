@@ -3,7 +3,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdarg>
-#include <initializer_list>
+#include <vector>
 
 namespace renderer {
 
@@ -35,6 +35,12 @@ RVec3 rvNorm(const RVec3& v) {
     return { v.x/n, v.y/n, v.z/n };
 }
 
+// An ECI direction, expressed as a unit vector in view space. Mirrors ToView's
+// (x,y,z)->(x,z,-y) reorientation; the metre->km scale drops out under normalize.
+RVec3 rvDir(const Vec3& d) {
+    return rvNorm(RVec3{ (float)d.x, (float)d.z, (float)-d.y });
+}
+
 // printf into a reusable buffer, for telemetry rows. Each value is formatted and
 // drawn before the next call, so a single rotating buffer is safe here.
 const char* fmt(const char* f, ...) {
@@ -51,6 +57,9 @@ const char* fmt(const char* f, ...) {
 Renderer::Renderer(RenderBackend& backend, const sim::Sim& s)
     : backend_(backend), sim_(s) {
     backend_.Init(1920, 1080, "Missile Program");
+    sim::State st = sim_.get_state();
+    rocket_.Build(backend_, { st.length, st.cm_dist, st.radius, st.engine_dist });
+    earth_.Build(backend_);
 }
 
 Renderer::~Renderer() {
@@ -136,85 +145,50 @@ void Renderer::DrawEarth(const RCamera& cam, RVec3 earthC) {
     RVec3 sun = rvNorm({ up.x*0.55f + 0.5f,
                          up.y*0.55f + 0.45f,
                          up.z*0.55f + 0.35f });
-    backend_.DrawEarth(earthC, EARTH_RADIUS_KM, sun, cam.position);
+    // Earth mesh is in ECI metres (+Z = north); place it at the shifted centre
+    // and apply the metre->km view basis. The differencing for earthC happened
+    // in double inside ToView, so float precision is fine from here on.
+    RMat4 model = rmath::mul(rmath::translate(earthC), rmath::viewBasis((float)M_TO_KM));
+    earth_.Draw(backend_, model, sun, earthC, cam.position);
 }
 
-void Renderer::DrawRocket() const {
-    // Palette.
-    const RColor kBody = { 226, 229, 235, 255 };  // brushed silver
-    const RColor kNose = { 196,  58,  58, 255 };  // red cap
-    const RColor kFin  = {  74,  80,  92, 255 };  // gunmetal
-    const RColor kBell = {  54,  56,  62, 255 };  // dark nozzle
-    const int    kSides = 24;                      // smoother than the old 16
-
-    sim::State st   = sim_.get_state();
+void Renderer::DrawRocket() {
+    sim::State st = sim_.get_state();
     Quat   qr       = st.q_rocket;
     Quat   qe       = st.q_engine;
-    double length   = st.length;
     double cm_dist  = st.cm_dist;
     double eng_dist = st.engine_dist;
-    double radius   = st.radius;
 
-    // Body frame in ECI: bz = nose direction, bx/by span the radial plane.
-    Vec3 bz = qrot(qr, {0, 0, 1});
-    Vec3 bx = qrot(qr, {1, 0, 0});
-    Vec3 by = qrot(qr, {0, 1, 0});
-    auto along = [&](double d) { return p_ref_eci_ + bz * (cm_dist - d); };  // d metres below the nose tip
+    // Staging shortens the stack; rebuild the hull/bell if the dimensions moved.
+    rocket_.Update(backend_, { st.length, st.cm_dist, st.radius, st.engine_dist });
 
-    // Hull: cylindrical body capped by a conical nose (top 18% of the length).
-    double cone_len = length * 0.18;
-    RVec3 noseW     = ToView(along(0.0));
-    RVec3 coneW     = ToView(along(cone_len));
-    RVec3 shoulderW = ToView(along(cone_len + length * 0.04));  // thin collar under the cone
-    RVec3 tailW     = ToView(along(length));
-    RVec3 engineW   = ToView(along(eng_dist));
-    float radiusW   = float(radius * M_TO_KM);
-
-    backend_.DrawCylinder(tailW, coneW, radiusW, radiusW, kSides, kBody);          // main body
-    backend_.DrawCylinder(shoulderW, coneW, radiusW * 1.04f, radiusW, kSides, kFin); // collar
-    backend_.DrawCylinder(coneW, noseW, radiusW, 0.0f, kSides, kNose);             // nose cone
-
-    // Four swept tail fins. Each is a double-sided triangle so it reads from
-    // any angle: leading edge up the body, trailing edge swept past the tail.
-    Vec3   tail    = along(length);
-    double finUp   = length * 0.16;     // how far the leading edge climbs the body
-    double finOut  = radius * 2.4;      // span beyond the hull
-    double finBack = length * 0.05;     // trailing-edge sweep behind the tail
-    for (const Vec3& rad : { bx, by, -bx, -by }) {
-        RVec3 a = ToView(tail + bz * finUp + rad * radius);
-        RVec3 b = ToView(tail + rad * radius);
-        RVec3 c = ToView(tail - bz * finBack + rad * (radius + finOut));
-        backend_.DrawTriangle3D(a, b, c, kFin);
-        backend_.DrawTriangle3D(a, c, b, kFin);  // back face
-    }
-
-    // Gimbaled engine bell: thrust = q_rocket * (q_engine * +Z); bell points opposite.
+    // Body axis (nose) and gimballed thrust direction, in ECI.
+    Vec3 bz         = qrot(qr, {0, 0, 1});
     Vec3 thrust_eci = qrot(qr, qrot(qe, {0, 0, 1}));
-    Vec3 nozzle     = along(eng_dist) - thrust_eci * 1.5;     // bell exit, ECI
-    backend_.DrawCylinder(engineW, ToView(nozzle), radiusW * 0.4f, radiusW * 1.15f, kSides, kBell);
+    Vec3 engine_eci = p_ref_eci_ + bz * (cm_dist - eng_dist);   // along(engine_dist)
+    Vec3 nozzle_eci = engine_eci - thrust_eci * 1.5;            // bell exit
 
-    // Exhaust plume: nested additive cones streaming out the nozzle along the
-    // exhaust (-thrust) direction, with a flicker so it looks alive. Drawn last,
-    // depth-test on but depth-write off so the layers glow through each other.
-    if (thrust_ > 0.02f) {
-        float t     = (float)backend_.Time();
-        float flick = 0.82f + 0.12f*sinf(t*46.0f) + 0.06f*sinf(t*71.0f + 1.7f);
-        double L    = length * 0.8 * thrust_ * flick;           // plume length, metres
-        auto cone = [&](double r0, double len, RColor c) {
-            c.a = (unsigned char)(c.a * thrust_);
-            backend_.DrawCylinder(ToView(nozzle), ToView(nozzle - thrust_eci * len),
-                                  float(r0 * M_TO_KM), 0.0f, kSides, c);
-        };
-        backend_.SetDepthMask(false);
-        backend_.BeginBlend(BlendMode::Additive);
-        cone(radius * 1.5,  L * 1.25, { 180,  70, 20,  90 });   // outer haze
-        cone(radius * 1.0,  L,        { 255, 140, 40, 140 });   // flame body
-        cone(radius * 0.55, L * 0.6,  { 255, 235, 180, 210 });  // white-hot core
-        backend_.DrawSphere(ToView(nozzle), radiusW * (0.7f + 0.2f*flick),
-                            { 255, 190, 90, (unsigned char)(150 * thrust_) });  // nozzle glow
-        backend_.EndBlend();
-        backend_.SetDepthMask(true);
-    }
+    // Model matrices. viewBasis maps ECI metres -> view km (with the axis swap);
+    // translate(ToView(p_ref)) carries the (double-differenced) scene shift.
+    RMat4 V   = rmath::viewBasis((float)M_TO_KM);
+    RMat4 pv  = rmath::translate(ToView(p_ref_eci_));
+    RMat4 Rqr = rmath::fromQuat(qr.w, qr.x, qr.y, qr.z);
+    RMat4 Rqe = rmath::fromQuat(qe.w, qe.x, qe.y, qe.z);
+
+    RocketFrame f;
+    f.hull = rmath::mul(pv, rmath::mul(V, Rqr));
+    // Bell pivots (gimbal) about the engine attach point in the body frame.
+    f.bell = rmath::mul(pv, rmath::mul(V, rmath::mul(Rqr,
+                 rmath::mul(rmath::translate({0, 0, (float)(cm_dist - eng_dist)}), Rqe))));
+
+    float t   = (float)backend_.Time();
+    f.firing  = thrust_ > 0.02f;
+    f.thrust  = thrust_;
+    f.flick   = 0.82f + 0.12f*sinf(t*46.0f) + 0.06f*sinf(t*71.0f + 1.7f);
+    f.nozzle  = ToView(nozzle_eci);
+    f.exhaust_dir = rvDir(-thrust_eci);
+
+    rocket_.Draw(backend_, f);
 }
 
 void Renderer::DrawPredictedTrajectory() const {
@@ -232,7 +206,8 @@ void Renderer::DrawPredictedTrajectory() const {
     const double dt        = 1.0;     // s per step
     const int    max_steps = 20000;   // path-length cap
 
-    backend_.SetLineWidth(2.0f);
+    std::vector<LineVertex> path;
+    path.reserve(max_steps * 2);
     RVec3 prev = ToView(r);
     for (int i = 0; i < max_steps; i++) {
         Vec3 k1r = v,                k1v = grav(r);
@@ -243,21 +218,25 @@ void Renderer::DrawPredictedTrajectory() const {
         v += (k1v + k2v*2 + k3v*2 + k4v) * (dt/6);
 
         RVec3 cur = ToView(r);
-        backend_.DrawLine3D(prev, cur, kYellow);
+        path.push_back({ prev, kYellow });
+        path.push_back({ cur,  kYellow });
         prev = cur;
 
         if (r.norm() <= EARTH_RADIUS_M) break;      // reached the surface
     }
+    backend_.DrawLines(path.data(), path.size(), 2.0f);
 }
 
 void Renderer::DrawECIAxes() const {
     // ECI axes through the Earth's centre: X vernal equinox (red),
     // Y 90E equatorial (green), Z north pole (blue).
     const double L = EARTH_RADIUS_M * 1.5;
-    backend_.SetLineWidth(2.0f);
-    backend_.DrawLine3D(ToView({-L, 0, 0}), ToView({L, 0, 0}), kRed);
-    backend_.DrawLine3D(ToView({0, -L, 0}), ToView({0, L, 0}), kGreen);
-    backend_.DrawLine3D(ToView({0, 0, -L}), ToView({0, 0, L}), kBlue);
+    LineVertex ax[6] = {
+        { ToView({-L, 0, 0}), kRed },   { ToView({L, 0, 0}), kRed },
+        { ToView({0, -L, 0}), kGreen }, { ToView({0, L, 0}), kGreen },
+        { ToView({0, 0, -L}), kBlue },  { ToView({0, 0, L}), kBlue },
+    };
+    backend_.DrawLines(ax, 6, 2.0f);
 }
 
 void Renderer::DrawBodyAxes() const {
@@ -265,27 +244,28 @@ void Renderer::DrawBodyAxes() const {
     Quat q = sim_.get_state().q_rocket;
     const float L = dist * 0.08f;
     auto tip = [&](const Vec3& v) {
-        return RVec3 { L * float(v.x), L * float(v.z), L * float(v.y) };  // ECI->world swap
+        return RVec3 { L * float(v.x), L * float(v.z), -L * float(v.y) };  // ECI->view rotation
     };
-    backend_.SetLineWidth(2.0f);
-    backend_.DrawLine3D({0, 0, 0}, tip(qrot(q, {1, 0, 0})), kPink);     // body X
-    backend_.DrawLine3D({0, 0, 0}, tip(qrot(q, {0, 1, 0})), kLime);     // body Y
-    backend_.DrawLine3D({0, 0, 0}, tip(qrot(q, {0, 0, 1})), kSkyBlue);  // body Z (nose)
+    LineVertex bx[6] = {
+        { {0,0,0}, kPink },    { tip(qrot(q, {1, 0, 0})), kPink },     // body X
+        { {0,0,0}, kLime },    { tip(qrot(q, {0, 1, 0})), kLime },     // body Y
+        { {0,0,0}, kSkyBlue }, { tip(qrot(q, {0, 0, 1})), kSkyBlue },  // body Z (nose)
+    };
+    backend_.DrawLines(bx, 6, 2.0f);
 }
 
 void Renderer::DrawSurfaceMarkers() const {
     // Launch origin and intended target: fixed points on the Earth's surface.
-    // Each is drawn as a small "pin" — a stalk along the local vertical capped
-    // by a sphere — so it reads as a point planted on the ground and is occluded
-    // by the globe when it rotates to the far side. Sized with zoom so the pins
-    // stay a roughly constant apparent size from the rocket's launch pad out to
-    // a full view of the planet.
+    // Each is a small "pin" — a stalk along the local vertical capped by a
+    // sphere — so it reads as a point planted on the ground and is occluded by
+    // the globe when it rotates to the far side. Sized with zoom so the pins
+    // stay a roughly constant apparent size across the zoom range.
     InitialStates init = sim_.get_state().init;
 
     const float sphereR = dist * 0.02f;          // marker radius (km, view units)
     const float pinLen  = dist * 0.06f;          // stalk height above the surface
-    backend_.SetLineWidth(2.0f);
 
+    std::vector<LineVertex> stalks;
     auto pin = [&](const Vec3& surf_eci, RColor c) {
         double n = surf_eci.norm();
         if (n < 1e-6) return;
@@ -293,12 +273,15 @@ void Renderer::DrawSurfaceMarkers() const {
         Vec3  tip_eci = surf_eci + out * (pinLen * KM_TO_M);   // lift the cap off the ground
         RVec3 baseW   = ToView(surf_eci);
         RVec3 tipW    = ToView(tip_eci);
-        backend_.DrawLine3D(baseW, tipW, c);
-        backend_.DrawSphere(tipW, sphereR, c);
+        stalks.push_back({ baseW, c });
+        stalks.push_back({ tipW,  c });
+        Material m; m.color = c;
+        backend_.DrawModel(rocket_.unitSphere(), rmath::placeSphere(tipW, sphereR), m);
     };
 
     pin(init.origin_r_eci, kGreen);   // launch origin
     pin(init.target_r_eci, kRed);     // intended target
+    backend_.DrawLines(stalks.data(), stalks.size(), 2.0f);
 }
 
 void Renderer::DrawTelemetry() const {
