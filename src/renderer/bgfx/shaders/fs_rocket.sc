@@ -5,6 +5,10 @@ $input v_texcoord0, v_color0, v_normal, v_wpos, v_objpos
 uniform vec4 u_light;    // xyz: sun direction (view)
 uniform vec4 u_camPos;   // xyz: camera (view)
 uniform vec4 u_heat;     // xyz: travel direction (view); w: aerodynamic heating [0,1]
+uniform vec4 u_earth;    // xyz: Earth centre (view); w: radius (km) -- for reflections
+SAMPLER2D(s_color, 0);   // Earth albedo (analytic reflection)
+SAMPLER2D(s_night, 1);   // Earth city lights (analytic reflection)
+SAMPLER2D(s_cloud, 2);   // Earth clouds (cloud shadow on the rocket)
 
 // --- Ashima/Gustavson 3D simplex noise (public domain) ----------------------
 vec4 mod289(vec4 x) { return x - floor(x * (1.0/289.0)) * 289.0; }
@@ -59,6 +63,21 @@ float fbm(vec3 p) {
     return f * 0.5 + 0.5;   // -> [0,1]-ish
 }
 
+// Lit Earth colour seen along a view-space direction from the planet centre
+// (for the analytic reflection). Inverts the (x,z,-y) view basis to ECI to get
+// the equirectangular UV, then applies the same day/night blend as the Earth.
+vec3 earthRefl(vec3 dv, vec3 L) {
+    vec3 e = vec3(dv.x, -dv.z, dv.y);                       // view -> ECI (+Z north)
+    float u  = atan(e.y, e.x) * (0.5 / 3.14159265) + (12.0 / 360.0);
+    float vt = acos(clamp(e.z, -1.0, 1.0)) / 3.14159265;
+    vec2 uv = vec2(u, vt);
+    vec3 ec = texture2D(s_color, uv).rgb;
+    vec3 nc = texture2D(s_night, uv).rgb; nc = nc * nc * 1.3;
+    float d = dot(dv, L);
+    float t = smoothstep(-0.15, 0.15, d);
+    return mix(nc, ec * (0.2 + 0.8 * max(d, 0.0)), t);
+}
+
 void main() {
     vec3  albedo    = v_color0.rgb;
     float metallic  = v_texcoord0.x;
@@ -96,12 +115,51 @@ void main() {
     vec3 sun = vec3(1.35, 1.33, 1.28);
     vec3 Lo  = (kd * albedo / 3.14159265 + spec) * sun * NdL;
 
-    // Ambient: dielectric diffuse + metal picks up a tinted sky reflection so it
-    // is not pure black where the sun does not hit.
+    // Cloud shadow: if a cloud lies between this point and the sun, dim the sun
+    // term (ray to the sun exits the cloud layer above -> sample cover there).
+    float Rc = u_earth.w + 60.0;
+    vec3  oc2 = v_wpos - u_earth.xyz;
+    float b2 = dot(oc2, L);
+    float disc2 = b2*b2 - (dot(oc2, oc2) - Rc*Rc);
+    if (disc2 > 0.0) {
+        float tc = -b2 + sqrt(disc2);
+        if (tc > 0.0) {
+            vec3 cd = normalize((v_wpos + L*tc) - u_earth.xyz);
+            vec3 ce = vec3(cd.x, -cd.z, cd.y);
+            vec2 cuv = vec2(atan(ce.y, ce.x) * (0.5/3.14159265) + 12.0/360.0,
+                            acos(clamp(ce.z, -1.0, 1.0)) / 3.14159265);
+            Lo *= 1.0 - 0.7 * texture2D(s_cloud, cuv).x;
+        }
+    }
+
+    // --- Analytic ray-traced reflection: the metal mirrors the actual Earth ---
+    vec3  Rdir = reflect(-V, N);
+    vec3  oc   = v_wpos - u_earth.xyz;
+    float bb   = dot(oc, Rdir);
+    float cc   = dot(oc, oc) - u_earth.w * u_earth.w;
+    float disc = bb*bb - cc;
+    vec3  env;
+    if (disc > 0.0 && (-bb - sqrt(disc)) > 0.0) {
+        vec3 hit = v_wpos + Rdir * (-bb - sqrt(disc));     // reflection hits the planet
+        env = earthRefl(normalize(hit - u_earth.xyz), L);
+    } else {
+        env = vec3(0.0, 0.0, 0.0);                         // reflection sees space
+        env += vec3(1.0, 0.97, 0.9) * pow(max(dot(Rdir, L), 0.0), 600.0) * 4.0;  // sun glint
+    }
+    vec3 kS = F0 + (max(vec3(1.0 - roughness, 1.0 - roughness, 1.0 - roughness), F0) - F0)
+                   * pow(1.0 - NdV, 5.0);
+    vec3 envRefl = env * kS;
+
+    // Ambient: a little dielectric sky fill + the ray-traced environment reflection.
     vec3 sky = vec3(0.34, 0.40, 0.52);
-    vec3 amb = albedo * sky * 0.45 * (1.0 - 0.6*metallic) + F0 * sky * 0.55;
+    vec3 amb = albedo * sky * 0.32 * (1.0 - 0.6*metallic) + envRefl;
 
     vec3 color = Lo + amb;
+
+    // Earthshine: single-bounce fill from the planet below (bluish bounce light).
+    vec3  toE = normalize(u_earth.xyz - v_wpos);
+    float es  = max(dot(N, toE), 0.0);
+    color += albedo * vec3(0.16, 0.26, 0.36) * (es * 0.5);
 
     // --- Aerodynamic heating: windward faces glow incandescent (ablation) ---
     float h = u_heat.w;

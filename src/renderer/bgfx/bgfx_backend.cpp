@@ -123,6 +123,7 @@ void BgfxBackend::Init(int width, int height, const char* title) {
     u_depth_       = bgfx::createUniform("u_depth",      bgfx::UniformType::Vec4);
     u_light_       = bgfx::createUniform("u_light",      bgfx::UniformType::Vec4);
     u_heat_        = bgfx::createUniform("u_heat",       bgfx::UniformType::Vec4);
+    u_earth_       = bgfx::createUniform("u_earth",      bgfx::UniformType::Vec4);
     s_color_       = bgfx::createUniform("s_color",      bgfx::UniformType::Sampler);
     s_bump_        = bgfx::createUniform("s_bump",       bgfx::UniformType::Sampler);
     s_night_       = bgfx::createUniform("s_night",      bgfx::UniformType::Sampler);
@@ -162,7 +163,7 @@ void BgfxBackend::Shutdown() {
     if (bgfx::isValid(flareProg_))  bgfx::destroy(flareProg_);
     if (bgfx::isValid(rocketProg_)) bgfx::destroy(rocketProg_);
     if (bgfx::isValid(heatProg_))   bgfx::destroy(heatProg_);
-    for (bgfx::UniformHandle u : { s_tex_, u_tint_, u_depth_, u_light_, u_heat_, s_color_, s_bump_, s_night_, s_rough_,
+    for (bgfx::UniformHandle u : { s_tex_, u_tint_, u_depth_, u_light_, u_heat_, u_earth_, s_color_, s_bump_, s_night_, s_rough_,
                                    u_sunDir_, u_earthCenter_, u_camPos_, u_dispScale_,
                                    s_cloud_, u_cloudAlpha_, u_cloudDisp_, u_atmos_,
                                    u_rayFwd_, u_rayRight_, u_rayUp_ })
@@ -295,7 +296,16 @@ void BgfxBackend::DrawModel(MeshHandle h, const RMat4& model, const Material& ma
         float heat[4] = { heatDir_.x, heatDir_.y, heatDir_.z, heatAmt_ };
         bgfx::setUniform(u_heat_, heat);
     }
-    bgfx::setTexture(0, s_tex_, mat.texture ? textures_[mat.texture - 1] : white_);
+    if (mat.lit) {
+        // Earth params + textures for the rocket's analytic reflection + earthshine.
+        float e[4] = { earthCenterView_.x, earthCenterView_.y, earthCenterView_.z, (float)EARTH_RADIUS_KM };
+        bgfx::setUniform(u_earth_, e);
+        bgfx::setTexture(0, s_color_, bgfx::isValid(earthColor_) ? earthColor_ : white_);
+        bgfx::setTexture(1, s_night_, bgfx::isValid(earthNight_) ? earthNight_ : white_);
+        bgfx::setTexture(2, s_cloud_, bgfx::isValid(earthCloud_) ? earthCloud_ : white_);
+    } else {
+        bgfx::setTexture(0, s_tex_, mat.texture ? textures_[mat.texture - 1] : white_);
+    }
 
     bgfx::ProgramHandle prog = mat.emissive ? heatProg_ : (mat.lit ? rocketProg_ : generic_);
     uint64_t state = BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_DEPTH_TEST_LESS;
@@ -377,6 +387,7 @@ void BgfxBackend::DrawEarth(const EarthFrame& f) {
     const GpuMesh& g = meshes_[earthMesh_ - 1];
     sunDirView_ = f.sun_dir;   // cache for lit DrawModel (the rocket), drawn later
     camPosView_ = f.cam_pos;
+    earthCenterView_ = f.center;
 
     // Atmosphere FIRST: full-screen analytic single scattering, drawn before the
     // opaque earth so the earth's real (displaced) silhouette overwrites the inner
@@ -426,6 +437,7 @@ void BgfxBackend::DrawEarth(const EarthFrame& f) {
     bgfx::setTexture(1, s_bump_,  earthBump_);   // also read by the vertex shader
     bgfx::setTexture(2, s_night_, earthNight_);
     bgfx::setTexture(3, s_rough_, earthRough_);
+    bgfx::setTexture(4, s_cloud_, earthCloud_);  // cloud shadows on the ground
 
     bgfx::setTransform(f.model.m);
     bgfx::setVertexBuffer(0, g.vbh);

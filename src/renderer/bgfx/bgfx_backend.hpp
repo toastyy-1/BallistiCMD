@@ -73,11 +73,12 @@ private:
     RVec3 camPosView_ { 0, 0, 0 };   // cached camera position, for the PBR view vector
     RVec3 heatDir_    { 0, 0, 1 };   // cached from DrawRocket: travel dir for the heating glow
     float heatAmt_    = 0.0f;        // cached aerodynamic-heating intensity
+    RVec3 earthCenterView_ { 0, 0, 0 };   // cached Earth centre, for rocket reflections
     bgfx::UniformHandle s_color_ = BGFX_INVALID_HANDLE, s_bump_ = BGFX_INVALID_HANDLE,
                         s_night_ = BGFX_INVALID_HANDLE, s_rough_ = BGFX_INVALID_HANDLE;
     bgfx::UniformHandle u_sunDir_ = BGFX_INVALID_HANDLE, u_earthCenter_ = BGFX_INVALID_HANDLE,
                         u_camPos_ = BGFX_INVALID_HANDLE, u_dispScale_ = BGFX_INVALID_HANDLE,
-                        u_heat_ = BGFX_INVALID_HANDLE;
+                        u_heat_ = BGFX_INVALID_HANDLE, u_earth_ = BGFX_INVALID_HANDLE;
     bgfx::UniformHandle s_cloud_ = BGFX_INVALID_HANDLE, u_cloudAlpha_ = BGFX_INVALID_HANDLE,
                         u_cloudDisp_ = BGFX_INVALID_HANDLE, u_atmos_ = BGFX_INVALID_HANDLE;
     bgfx::UniformHandle u_rayFwd_ = BGFX_INVALID_HANDLE, u_rayRight_ = BGFX_INVALID_HANDLE,

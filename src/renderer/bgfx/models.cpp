@@ -129,10 +129,11 @@ void RocketModel::buildHullBell(RenderBackend& b) {
     Mesh hull;
     size_t k;
 
-    // Main body — brushed metal (low roughness = shinier fuselage).
+    // Main body — glossy white paint: mostly diffuse with only a mild reflection
+    // (low metallic so the white albedo dominates instead of acting as a mirror).
     k = hull.verts.size();
     geom::appendFrustum(hull, tail_z, nose_base, radius, radius, kSides, kBody);
-    setMR(hull, k, 0.85f, 0.22f);
+    setMR(hull, k, 0.12f, 0.30f);
 
     // Thin collar where the nose meets the body.
     k = hull.verts.size();

@@ -6,6 +6,7 @@ SAMPLER2D(s_color, 0);   // daytime albedo
 SAMPLER2D(s_bump,  1);   // height / relief
 SAMPLER2D(s_night, 2);   // city lights
 SAMPLER2D(s_rough, 3);   // roughness (low over water -> glossy ocean glint)
+SAMPLER2D(s_cloud, 4);   // cloud cover (for cloud shadows on the ground)
 uniform vec4 u_sunDir;       // xyz: view-space direction TO the sun
 uniform vec4 u_earthCenter;  // xyz: view-space sphere centre (km)
 uniform vec4 u_camPos;       // xyz: view-space camera (km)
@@ -35,6 +36,21 @@ void main() {
     float t      = smoothstep(-0.15, 0.15, term);        // 0 = night .. 1 = day
 
     vec3  day = albedo * (0.15 + 0.85*lit);
+
+    // Cloud shadows: cast a ray from this ground point toward the sun; where it
+    // crosses the cloud layer and there's cover, darken the lit ground. Sampling
+    // at the cloud altitude gives the correct offset (longer shadows at low sun),
+    // so the shadow falls beside the cloud instead of hiding under it.
+    vec3  ocC = v_wpos - u_earthCenter.xyz;
+    float Rc  = length(ocC) + 220.0;                         // exaggerated cloud altitude so
+    float bC  = dot(ocC, L);                                 // the shadow clears the cloud it
+    float tc  = -bC + sqrt(max(bC*bC - (dot(ocC, ocC) - Rc*Rc), 0.0));  // is cast from
+    vec3  cp  = normalize((v_wpos + L*tc) - u_earthCenter.xyz);
+    vec3  ce  = vec3(cp.x, -cp.z, cp.y);                     // view -> ECI
+    vec2  cuv = vec2(atan(ce.y, ce.x) * (0.5/3.14159265) + 12.0/360.0,
+                     acos(clamp(ce.z, -1.0, 1.0)) / 3.14159265);
+    float cloudSh = clamp(texture2D(s_cloud, cuv).x * 1.4, 0.0, 1.0);
+    day *= 1.0 - 0.7 * cloudSh * smoothstep(0.0, 0.10, term);
 
     // PBR specular (Cook-Torrance GGX): the roughness map makes oceans glossy
     // (sharp sun glint) and land matte. F0 ~ 0.02 (dielectric water).
