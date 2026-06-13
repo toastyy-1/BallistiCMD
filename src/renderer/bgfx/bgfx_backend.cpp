@@ -109,6 +109,8 @@ void BgfxBackend::Init(int width, int height, const char* title) {
                                      loadShaderFile("src/renderer/bgfx/shaders/fs_earth.bin"), true);
     cloudProg_ = bgfx::createProgram(loadShaderFile("src/renderer/bgfx/shaders/vs_cloud.bin"),
                                      loadShaderFile("src/renderer/bgfx/shaders/fs_cloud.bin"), true);
+    atmosProg_ = bgfx::createProgram(loadShaderFile("src/renderer/bgfx/shaders/vs_atmos.bin"),
+                                     loadShaderFile("src/renderer/bgfx/shaders/fs_atmos.bin"), true);
 
     s_tex_         = bgfx::createUniform("s_tex",        bgfx::UniformType::Sampler);
     u_tint_        = bgfx::createUniform("u_tint",       bgfx::UniformType::Vec4);
@@ -123,6 +125,7 @@ void BgfxBackend::Init(int width, int height, const char* title) {
     s_cloud_       = bgfx::createUniform("s_cloud",      bgfx::UniformType::Sampler);
     u_cloudAlpha_  = bgfx::createUniform("u_cloudAlpha", bgfx::UniformType::Vec4);
     u_cloudDisp_   = bgfx::createUniform("u_cloudDisp",  bgfx::UniformType::Vec4);
+    u_atmos_       = bgfx::createUniform("u_atmos",      bgfx::UniformType::Vec4);
 
     const uint8_t whitePix[4] = { 255, 255, 255, 255 };
     white_ = bgfx::createTexture2D(1, 1, false, 1, bgfx::TextureFormat::RGBA8, 0,
@@ -142,9 +145,10 @@ void BgfxBackend::Shutdown() {
     if (bgfx::isValid(generic_))    bgfx::destroy(generic_);
     if (bgfx::isValid(earthProg_))  bgfx::destroy(earthProg_);
     if (bgfx::isValid(cloudProg_))  bgfx::destroy(cloudProg_);
+    if (bgfx::isValid(atmosProg_))  bgfx::destroy(atmosProg_);
     for (bgfx::UniformHandle u : { s_tex_, u_tint_, u_depth_, s_color_, s_bump_, s_night_,
                                    u_sunDir_, u_earthCenter_, u_camPos_, u_dispScale_,
-                                   s_cloud_, u_cloudAlpha_, u_cloudDisp_ })
+                                   s_cloud_, u_cloudAlpha_, u_cloudDisp_, u_atmos_ })
         if (bgfx::isValid(u)) bgfx::destroy(u);
     bgfx::shutdown();
     if (window_) glfwDestroyWindow(window_);
@@ -384,6 +388,27 @@ void BgfxBackend::DrawEarth(const EarthFrame& f) {
                            | BGFX_STATE_DEPTH_TEST_LESS | BGFX_STATE_BLEND_ALPHA | BGFX_STATE_CULL_CW);
             bgfx::submit(0, cloudProg_);
         }
+    }
+
+    // Atmosphere: a single shell larger than the planet, additively blended. The
+    // fragment shader turns the view ray's impact parameter into a blue limb glow
+    // that fades softly into space (and a thin haze just inside the disk edge).
+    if (cloudMesh_) {
+        const float atmFactor = 1.035f;
+        const GpuMesh& am = meshes_[cloudMesh_ - 1];
+        RMat4 m = rmath::mul(f.model, rmath::scale(atmFactor));
+        setVec4(u_sunDir_, f.sun_dir);
+        setVec4(u_earthCenter_, f.center);
+        setVec4(u_camPos_, f.cam_pos);
+        float at[4] = { (float)EARTH_RADIUS_KM, (float)EARTH_RADIUS_KM * atmFactor, 45.0f, 150.0f };
+        bgfx::setUniform(u_atmos_, at);
+        bgfx::setUniform(u_depth_, depth);
+        bgfx::setTransform(m.m);
+        bgfx::setVertexBuffer(0, am.vbh);
+        bgfx::setIndexBuffer(am.ibh);
+        bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A
+                       | BGFX_STATE_DEPTH_TEST_LESS | BGFX_STATE_BLEND_ADD | BGFX_STATE_CULL_CW);
+        bgfx::submit(0, atmosProg_);
     }
 }
 
