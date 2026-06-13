@@ -1,5 +1,6 @@
 #pragma once
 #include "render_backend.hpp"
+#include "models.hpp"
 #include "../constants.hpp"
 #include "../types.hpp"
 
@@ -24,18 +25,19 @@ private:
     void DrawECIAxes() const;
     void DrawBodyAxes() const;
     void DrawSurfaceMarkers() const;
-    void DrawRocket() const;
+    void DrawRocket();
     void DrawPredictedTrajectory() const;
     void DrawTelemetry() const;
 
     // ECI position (m) -> shifted render-scene position (km), with the rocket
     // held at the world origin. Differencing in double before the float cast
     // kills the jitter you'd get from float at Earth-radius magnitudes. The
-    // axis swap (x,y,z)->(x,z,y) matches the sphere's -90 deg X rotation, so the
-    // texture and the ECI frame line up.
+    // reorientation (x,y,z)->(x,z,-y) is RotateX(-90 deg): it brings ECI +Z
+    // (north) to view +Y (up) as a proper rotation (det +1), so winding/normals
+    // survive. Must match rmath::viewBasis exactly.
     RVec3 ToView(const Vec3& eci_m) const {
         Vec3 d = eci_m - p_ref_eci_;
-        return { float(d.x * M_TO_KM), float(d.z * M_TO_KM), float(d.y * M_TO_KM) };
+        return { float(d.x * M_TO_KM), float(d.z * M_TO_KM), float(-d.y * M_TO_KM) };
     }
 
     // The scene is shifted so this point (the rocket's ECI position) sits at the
@@ -45,6 +47,9 @@ private:
 
     RenderBackend&   backend_;
     const sim::Sim&  sim_;
+
+    RocketModel rocket_;
+    EarthModel  earth_;
 
     float yaw   = 0.0f;
     float pitch = 0.3f;
