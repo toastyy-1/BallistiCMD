@@ -1,6 +1,5 @@
 #pragma once
 #include "render_backend.hpp"
-#include "models.hpp"
 #include "../constants.hpp"
 #include "../types.hpp"
 
@@ -25,7 +24,7 @@ private:
     void DrawECIAxes() const;
     void DrawBodyAxes() const;
     void DrawSurfaceMarkers() const;
-    void DrawRocket();
+    void DrawRocket() const;
     void DrawPredictedTrajectory() const;
     void DrawTelemetry() const;
 
@@ -48,8 +47,8 @@ private:
     RenderBackend&   backend_;
     const sim::Sim&  sim_;
 
-    RocketModel rocket_;
-    EarthModel  earth_;
+    // Renderer-owned unit sphere (radius 1) for the surface markers.
+    MeshHandle markerSphere_ = 0;
 
     float yaw   = 0.0f;
     float pitch = 0.3f;

@@ -3,21 +3,19 @@
 #include "render_types.hpp"
 #include "mesh.hpp"
 #include "rmath.hpp"
+#include "scene.hpp"
 
 // Universal rendering backend interface.
 //
-// The rendering *logic* (camera orbit, rocket geometry, predicted trajectory,
-// telemetry layout — all of renderer::Renderer) is written once against this
-// interface using backend-neutral types. Concrete backends (raylib today, BGFX
-// or anything else later) implement the primitives below and can be swapped in
-// without touching Renderer. Pick the backend in main.cpp.
-//
-// The model is retained-mode (bgfx's natural shape): geometry is built on the
-// CPU by the geometry builders, uploaded once via CreateMesh, and drawn with a
-// model matrix + Material. Only per-frame line work (trajectory, axes, markers)
-// is transient, via DrawLines. Backend-neutral value types live in
-// render_types.hpp (RVec3/RColor/...), mesh.hpp (Vertex/Mesh/Material/handles),
-// and rmath.hpp (RMat4).
+// The rendering logic (camera orbit, rocket geometry, predicted trajectory,
+// telemetry layout, all of renderer::Renderer) is written once against this
+// interface using backend-neutral types. Concrete backends (raylib or BGFX)
+// implement the primitives below and can be swapped in without touching the
+// Renderer. Backend-neutral value types live in render_types.hpp
+// (RVec3/RColor/...), mesh.hpp (Vertex/Mesh/Material/handles), rmath.hpp
+// (RMat4), and the per-frame domain frames in scene.hpp
+// (RocketFrame/EarthFrame). The renderer owns the precision-critical ECI->view
+// shift, so all transforms reaching a backend are already in view space.
 
 namespace renderer {
 
@@ -45,24 +43,20 @@ public:
     virtual void BeginFrame(RColor clear) = 0;
     virtual void EndFrame() = 0;
     // Near/far clip planes. Must be set before Begin3D (they are baked into the
-    // projection), which is what keeps the depth buffer usable across this
-    // scene's huge scale range.
+    // projection).
     virtual void SetClipPlanes(float near_plane, float far_plane) = 0;
     virtual void Begin3D(const RCamera& cam) = 0;
     virtual void End3D() = 0;
 
-    // 3D drawing (between Begin3D/End3D).
     // A static mesh placed by a model matrix, shaded/blended per Material.
     virtual void DrawModel(MeshHandle h, const RMat4& model, const Material& mat) = 0;
     // A transient line list in view space (pairs of vertices), per-vertex colour.
     virtual void DrawLines(const LineVertex* v, size_t count, float width) = 0;
-    // High-level: a sun-lit, textured Earth. The caller supplies the (renderer-
-    // built) sphere mesh + texture and the domain inputs; each backend owns the
-    // lit/atmospheric shader. sun_dir is the (view-space) direction TO the sun;
-    // earth_center / cam_pos are view-space (km).
-    virtual void DrawEarth(MeshHandle sphere, TextureHandle tex, const RMat4& model,
-                           const RVec3& sun_dir, const RVec3& earth_center,
-                           const RVec3& cam_pos) = 0;
+
+    // Semantic scene objects (the backend owns the geometry, textures, and
+    // shaders and renders the supplied domain frame however it likes).
+    virtual void DrawRocket(const RocketFrame& f) = 0;
+    virtual void DrawEarth(const EarthFrame& f) = 0;
 
     // 2D overlay (screen-space, drawn after End3D).
     virtual void DrawRect(int x, int y, int w, int h, RColor c) = 0;

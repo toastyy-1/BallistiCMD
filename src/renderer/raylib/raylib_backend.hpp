@@ -2,6 +2,7 @@
 #include <raylib.h>
 #include <vector>
 #include "../render_backend.hpp"
+#include "models.hpp"
 
 namespace renderer {
 
@@ -27,9 +28,8 @@ public:
 
     void DrawModel(MeshHandle h, const RMat4& model, const Material& mat) override;
     void DrawLines(const LineVertex* v, size_t count, float width) override;
-    void DrawEarth(MeshHandle sphere, TextureHandle tex, const RMat4& model,
-                   const RVec3& sun_dir, const RVec3& earth_center,
-                   const RVec3& cam_pos) override;
+    void DrawRocket(const RocketFrame& f) override;
+    void DrawEarth(const EarthFrame& f) override;
 
     void DrawRect(int x, int y, int w, int h, RColor c) override;
     void DrawRectLines(int x, int y, int w, int h, RColor c) override;
@@ -37,6 +37,8 @@ public:
     void DrawFPS(int x, int y) override;
 
 private:
+    void ensureEarth();   // lazily build the Earth mesh + texture on first draw
+
     std::vector<::Mesh>      meshes_;     // handle = index + 1
     std::vector<::Texture2D> textures_;   // handle = index + 1
 
@@ -48,6 +50,11 @@ private:
     int      sunDirLoc_      = -1;
     int      earthCenterLoc_ = -1;
     int      camPosLoc_      = -1;
+
+    // Backend-owned scene objects (the simple reference look).
+    RocketModel   rocket_{};
+    MeshHandle    earthMesh_ = 0;
+    TextureHandle earthTex_  = 0;
 };
 
 }

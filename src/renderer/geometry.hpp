@@ -2,11 +2,9 @@
 
 #include "mesh.hpp"
 
-// Lightweight parametric mesh builders. Everything the scene needs is a frustum
-// (cylinder / cone / nose), a sphere, or a triangle, so these few primitives
-// compose into the rocket hull, engine bell, plume cones, Earth, and markers.
-// All coordinates are local to the part; the renderer places them with a model
-// matrix (see rmath.hpp). UVs are only meaningful for buildSphere (the Earth).
+// Lightweight parametric mesh builders. All coordinates are local to the part;
+// the renderer places them with a model matrix (see rmath.hpp).
+// UVs are only meaningful for buildSphere (the Earth).
 
 namespace renderer::geom {
 
