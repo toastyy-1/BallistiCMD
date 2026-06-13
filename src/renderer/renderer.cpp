@@ -190,6 +190,12 @@ void Renderer::DrawRocket() const {
     // only form in atmosphere (over/under-expanded nozzle), not in vacuum.
     double altitude = st.r.norm() - EARTH_RADIUS_M;
     f.air     = (float)exp(-fmax(altitude, 0.0) / 8000.0);
+    // Aerodynamic heating ~ dynamic pressure (air * v^2): glows on ascent through
+    // the dense atmosphere at speed and (much more) on reentry.
+    double speed = st.v.norm();
+    double q     = (double)f.air * speed * speed;   // ~ dynamic pressure (normalised air)
+    f.heating = (float)fmax(0.0, fmin(1.0, (q - 2.0e4) / 4.0e5));
+    f.vel_dir = rvDir(st.v);
     f.nozzle  = ToView(nozzle_eci);
     f.exhaust_dir = rvDir(-thrust_eci);
 

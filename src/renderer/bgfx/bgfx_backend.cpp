@@ -115,11 +115,14 @@ void BgfxBackend::Init(int width, int height, const char* title) {
                                      loadShaderFile("src/renderer/bgfx/shaders/fs_flare.bin"), true);
     rocketProg_ = bgfx::createProgram(loadShaderFile("src/renderer/bgfx/shaders/vs_rocket.bin"),
                                       loadShaderFile("src/renderer/bgfx/shaders/fs_rocket.bin"), true);
+    heatProg_  = bgfx::createProgram(loadShaderFile("src/renderer/bgfx/shaders/vs_heat.bin"),
+                                     loadShaderFile("src/renderer/bgfx/shaders/fs_heat.bin"), true);
 
     s_tex_         = bgfx::createUniform("s_tex",        bgfx::UniformType::Sampler);
     u_tint_        = bgfx::createUniform("u_tint",       bgfx::UniformType::Vec4);
     u_depth_       = bgfx::createUniform("u_depth",      bgfx::UniformType::Vec4);
     u_light_       = bgfx::createUniform("u_light",      bgfx::UniformType::Vec4);
+    u_heat_        = bgfx::createUniform("u_heat",       bgfx::UniformType::Vec4);
     s_color_       = bgfx::createUniform("s_color",      bgfx::UniformType::Sampler);
     s_bump_        = bgfx::createUniform("s_bump",       bgfx::UniformType::Sampler);
     s_night_       = bgfx::createUniform("s_night",      bgfx::UniformType::Sampler);
@@ -156,7 +159,8 @@ void BgfxBackend::Shutdown() {
     if (bgfx::isValid(atmosProg_))  bgfx::destroy(atmosProg_);
     if (bgfx::isValid(flareProg_))  bgfx::destroy(flareProg_);
     if (bgfx::isValid(rocketProg_)) bgfx::destroy(rocketProg_);
-    for (bgfx::UniformHandle u : { s_tex_, u_tint_, u_depth_, u_light_, s_color_, s_bump_, s_night_,
+    if (bgfx::isValid(heatProg_))   bgfx::destroy(heatProg_);
+    for (bgfx::UniformHandle u : { s_tex_, u_tint_, u_depth_, u_light_, u_heat_, s_color_, s_bump_, s_night_,
                                    u_sunDir_, u_earthCenter_, u_camPos_, u_dispScale_,
                                    s_cloud_, u_cloudAlpha_, u_cloudDisp_, u_atmos_,
                                    u_rayFwd_, u_rayRight_, u_rayUp_ })
@@ -279,26 +283,31 @@ void BgfxBackend::DrawModel(MeshHandle h, const RMat4& model, const Material& ma
     bgfx::setUniform(u_tint_, tint);
     float depth[4] = { far_, 0, 0, 0 };
     bgfx::setUniform(u_depth_, depth);
-    // Lit materials (the rocket) go through the PBR + grime program; everything
-    // else (lines, plume, markers, 2D) uses the flat generic program.
+    // Program select: emissive -> additive ablation shell; lit -> PBR+grime;
+    // everything else (lines, plume, markers, 2D) -> flat generic.
     float light[4] = { sunDirView_.x, sunDirView_.y, sunDirView_.z, mat.lit ? 1.0f : 0.0f };
     bgfx::setUniform(u_light_, light);
-    if (mat.lit) {
+    if (mat.lit || mat.emissive) {
         float cam[4] = { camPosView_.x, camPosView_.y, camPosView_.z, 0 };
         bgfx::setUniform(u_camPos_, cam);
+        float heat[4] = { heatDir_.x, heatDir_.y, heatDir_.z, heatAmt_ };
+        bgfx::setUniform(u_heat_, heat);
     }
     bgfx::setTexture(0, s_tex_, mat.texture ? textures_[mat.texture - 1] : white_);
 
+    bgfx::ProgramHandle prog = mat.emissive ? heatProg_ : (mat.lit ? rocketProg_ : generic_);
     uint64_t state = BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_DEPTH_TEST_LESS;
     if (mat.depth_write) state |= BGFX_STATE_WRITE_Z;
-    if (mat.blend == BlendMode::Additive) {
+    if (mat.emissive) {
+        state |= BGFX_STATE_BLEND_ADD | BGFX_STATE_CULL_CW;   // glow shell, single layer
+    } else if (mat.blend == BlendMode::Additive) {
         state |= BGFX_STATE_BLEND_ADD;          // plume: both sides, no cull
     } else {
         state |= BGFX_STATE_BLEND_ALPHA;
         if (mat.cull) state |= BGFX_STATE_CULL_CW;   // closed solids; off for open bell / fins
     }
     bgfx::setState(state);
-    bgfx::submit(0, mat.lit ? rocketProg_ : generic_);
+    bgfx::submit(0, prog);
 }
 
 void BgfxBackend::DrawLines(const LineVertex* v, size_t count, float /*width*/) {
@@ -325,6 +334,8 @@ void BgfxBackend::DrawLines(const LineVertex* v, size_t count, float /*width*/) 
 }
 
 void BgfxBackend::DrawRocket(const RocketFrame& f) {
+    heatDir_ = f.vel_dir;   // cached for the lit (PBR) DrawModel heating glow
+    heatAmt_ = f.heating;
     rocket_.Ensure(*this, f.dims);
     rocket_.Draw(*this, f);
 }

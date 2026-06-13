@@ -66,14 +66,18 @@ private:
     bgfx::ProgramHandle atmosProg_ = BGFX_INVALID_HANDLE;
     bgfx::ProgramHandle flareProg_ = BGFX_INVALID_HANDLE;
     bgfx::ProgramHandle rocketProg_ = BGFX_INVALID_HANDLE;   // PBR + grime (lit DrawModel)
+    bgfx::ProgramHandle heatProg_   = BGFX_INVALID_HANDLE;   // additive ablation shell (emissive)
     bgfx::UniformHandle s_tex_ = BGFX_INVALID_HANDLE, u_tint_ = BGFX_INVALID_HANDLE,
                         u_depth_ = BGFX_INVALID_HANDLE, u_light_ = BGFX_INVALID_HANDLE;
     RVec3 sunDirView_ { 0, 0, 1 };   // cached each frame from DrawEarth, for lit DrawModel
     RVec3 camPosView_ { 0, 0, 0 };   // cached camera position, for the PBR view vector
+    RVec3 heatDir_    { 0, 0, 1 };   // cached from DrawRocket: travel dir for the heating glow
+    float heatAmt_    = 0.0f;        // cached aerodynamic-heating intensity
     bgfx::UniformHandle s_color_ = BGFX_INVALID_HANDLE, s_bump_ = BGFX_INVALID_HANDLE,
                         s_night_ = BGFX_INVALID_HANDLE;
     bgfx::UniformHandle u_sunDir_ = BGFX_INVALID_HANDLE, u_earthCenter_ = BGFX_INVALID_HANDLE,
-                        u_camPos_ = BGFX_INVALID_HANDLE, u_dispScale_ = BGFX_INVALID_HANDLE;
+                        u_camPos_ = BGFX_INVALID_HANDLE, u_dispScale_ = BGFX_INVALID_HANDLE,
+                        u_heat_ = BGFX_INVALID_HANDLE;
     bgfx::UniformHandle s_cloud_ = BGFX_INVALID_HANDLE, u_cloudAlpha_ = BGFX_INVALID_HANDLE,
                         u_cloudDisp_ = BGFX_INVALID_HANDLE, u_atmos_ = BGFX_INVALID_HANDLE;
     bgfx::UniformHandle u_rayFwd_ = BGFX_INVALID_HANDLE, u_rayRight_ = BGFX_INVALID_HANDLE,

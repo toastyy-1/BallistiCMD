@@ -39,6 +39,7 @@ using TextureHandle = std::uint32_t;
 struct Material {
     RColor        color       = kWhite;
     bool          lit         = false;
+    bool          emissive    = false;  // additive aerodynamic-heating "shell" pass
     BlendMode     blend       = BlendMode::Alpha;
     bool          depth_write = true;
     bool          cull        = true;   // back-face cull (off for open/thin geometry)

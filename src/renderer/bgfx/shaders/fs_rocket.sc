@@ -4,6 +4,7 @@ $input v_texcoord0, v_color0, v_normal, v_wpos, v_objpos
 
 uniform vec4 u_light;    // xyz: sun direction (view)
 uniform vec4 u_camPos;   // xyz: camera (view)
+uniform vec4 u_heat;     // xyz: travel direction (view); w: aerodynamic heating [0,1]
 
 // --- Ashima/Gustavson 3D simplex noise (public domain) ----------------------
 vec4 mod289(vec4 x) { return x - floor(x * (1.0/289.0)) * 289.0; }
@@ -100,5 +101,18 @@ void main() {
     vec3 sky = vec3(0.34, 0.40, 0.52);
     vec3 amb = albedo * sky * 0.45 * (1.0 - 0.6*metallic) + F0 * sky * 0.55;
 
-    gl_FragColor = vec4(Lo + amb, 1.0);
+    vec3 color = Lo + amb;
+
+    // --- Aerodynamic heating: windward faces glow incandescent (ablation) ---
+    float h = u_heat.w;
+    if (h > 0.001) {
+        float wind = max(dot(N, normalize(u_heat.xyz)), 0.0);   // facing into the airflow
+        float glow = pow(wind, 1.5) * h;
+        // Blackbody-ish ramp: dull red -> orange -> white as heating rises.
+        vec3 hot = mix(vec3(0.7, 0.06, 0.0), vec3(1.0, 0.45, 0.08), smoothstep(0.0, 0.45, h));
+        hot = mix(hot, vec3(1.0, 0.92, 0.75), smoothstep(0.5, 1.0, h));
+        color += hot * glow * 2.2;
+    }
+
+    gl_FragColor = vec4(color, 1.0);
 }

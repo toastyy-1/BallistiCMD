@@ -185,6 +185,15 @@ void RocketModel::Draw(RenderBackend& b, const RocketFrame& f) const {
     Material bell;  bell.lit = true; bell.cull = false;    // unculled: concave nozzle interior
     b.DrawModel(bell_, f.bell, bell);
 
+    // Ablation sheath: re-draw the hull slightly inflated as an additive glow
+    // shell, so the plasma follows the rocket's shape (windward incandescence +
+    // a bulge ahead of the nose) instead of a sphere. Intensity comes from
+    // u_heat in the shader; shown on ascent and (brightly) on reentry.
+    if (f.heating > 0.03f) {
+        Material heat; heat.emissive = true; heat.depth_write = false;
+        b.DrawModel(hull_, rmath::mul(f.hull, rmath::scale(1.05f)), heat);
+    }
+
     if (!f.firing) return;
 
     // Exhaust plume: nested additive cones streaming out the nozzle along the
