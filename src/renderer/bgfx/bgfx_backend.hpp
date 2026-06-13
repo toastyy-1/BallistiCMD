@@ -64,6 +64,7 @@ private:
     bgfx::ProgramHandle earthProg_ = BGFX_INVALID_HANDLE;
     bgfx::ProgramHandle cloudProg_ = BGFX_INVALID_HANDLE;
     bgfx::ProgramHandle atmosProg_ = BGFX_INVALID_HANDLE;
+    bgfx::ProgramHandle flareProg_ = BGFX_INVALID_HANDLE;
     bgfx::UniformHandle s_tex_ = BGFX_INVALID_HANDLE, u_tint_ = BGFX_INVALID_HANDLE,
                         u_depth_ = BGFX_INVALID_HANDLE;
     bgfx::UniformHandle s_color_ = BGFX_INVALID_HANDLE, s_bump_ = BGFX_INVALID_HANDLE,

@@ -111,6 +111,8 @@ void BgfxBackend::Init(int width, int height, const char* title) {
                                      loadShaderFile("src/renderer/bgfx/shaders/fs_cloud.bin"), true);
     atmosProg_ = bgfx::createProgram(loadShaderFile("src/renderer/bgfx/shaders/vs_atmos.bin"),
                                      loadShaderFile("src/renderer/bgfx/shaders/fs_atmos.bin"), true);
+    flareProg_ = bgfx::createProgram(loadShaderFile("src/renderer/bgfx/shaders/vs_flare.bin"),
+                                     loadShaderFile("src/renderer/bgfx/shaders/fs_flare.bin"), true);
 
     s_tex_         = bgfx::createUniform("s_tex",        bgfx::UniformType::Sampler);
     u_tint_        = bgfx::createUniform("u_tint",       bgfx::UniformType::Vec4);
@@ -149,6 +151,7 @@ void BgfxBackend::Shutdown() {
     if (bgfx::isValid(earthProg_))  bgfx::destroy(earthProg_);
     if (bgfx::isValid(cloudProg_))  bgfx::destroy(cloudProg_);
     if (bgfx::isValid(atmosProg_))  bgfx::destroy(atmosProg_);
+    if (bgfx::isValid(flareProg_))  bgfx::destroy(flareProg_);
     for (bgfx::UniformHandle u : { s_tex_, u_tint_, u_depth_, s_color_, s_bump_, s_night_,
                                    u_sunDir_, u_earthCenter_, u_camPos_, u_dispScale_,
                                    s_cloud_, u_cloudAlpha_, u_cloudDisp_, u_atmos_,
@@ -428,6 +431,76 @@ void BgfxBackend::DrawEarth(const EarthFrame& f) {
             bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A
                            | BGFX_STATE_DEPTH_TEST_LESS | BGFX_STATE_BLEND_ALPHA | BGFX_STATE_CULL_CW);
             bgfx::submit(0, cloudProg_);
+        }
+    }
+
+    // --- Sun + lens flare (screen space, additive, on top of the 3D scene) ---
+    if (bgfx::isValid(flareProg_)) {
+        RVec3 fwd   = rmath::normalize(rmath::sub(cam_.target, cam_.position));
+        RVec3 right = rmath::normalize(rmath::cross(fwd, cam_.up));
+        RVec3 up    = rmath::cross(right, fwd);
+        float tanH  = tanf(cam_.fovy * 0.5f * (float)(M_PI / 180.0));
+        float aspect = height_ > 0 ? (float)width_ / (float)height_ : 1.0f;
+
+        RVec3 S  = f.sun_dir;                       // unit, view space
+        float sf = rmath::dot(S, fwd);              // > 0: sun in front of camera
+        auto smooth01 = [](float a, float b, float x) {
+            float t = (x - a) / (b - a); t = t < 0 ? 0 : (t > 1 ? 1 : t); return t*t*(3.0f - 2.0f*t);
+        };
+        if (sf > 0.02f) {
+            // Sun screen position (NDC), inverse of the ray reconstruction.
+            float nx = (rmath::dot(S, right) / sf) / (tanH * aspect);
+            float ny = (rmath::dot(S, up)    / sf) / tanH;
+
+            // Soft occlusion: fade as the sun passes behind the Earth's disk.
+            RVec3 toC = rmath::sub(f.center, f.cam_pos);
+            float dC  = rmath::length(toC);
+            float cosA = dC > 1e-3f ? rmath::dot(S, RVec3{ toC.x/dC, toC.y/dC, toC.z/dC }) : -1.0f;
+            float sunAng   = acosf(fmaxf(-1.0f, fminf(1.0f, cosA)));
+            float earthAng = asinf(fminf(1.0f, (float)EARTH_RADIUS_KM / fmaxf(dC, (float)EARTH_RADIUS_KM)));
+            float occ      = smooth01(earthAng * 0.95f, earthAng * 1.10f, sunAng);
+            float edge     = fmaxf(fabsf(nx), fabsf(ny));
+            float onScreen = 1.0f - smooth01(1.3f, 2.4f, edge);
+            float master   = occ * onScreen;
+
+            if (master > 0.003f) {
+                std::vector<Vertex> fv;
+                fv.reserve(9 * 6);
+                auto add = [&](float t, float size, RColor c, float inten, float power, float ring) {
+                    float cx = nx * (1.0f - t), cy = ny * (1.0f - t);   // along sun -> screen centre
+                    float a  = fminf(1.0f, inten * master);
+                    RColor col = { c.r, c.g, c.b, (unsigned char)(a * 255.0f) };
+                    float sx = size / aspect, sy = size;
+                    Vertex v0{ {cx-sx, cy-sy, 0}, {power, ring, 0}, -1, -1, col };
+                    Vertex v1{ {cx+sx, cy-sy, 0}, {power, ring, 0},  1, -1, col };
+                    Vertex v2{ {cx+sx, cy+sy, 0}, {power, ring, 0},  1,  1, col };
+                    Vertex v3{ {cx-sx, cy+sy, 0}, {power, ring, 0}, -1,  1, col };
+                    fv.push_back(v0); fv.push_back(v1); fv.push_back(v2);
+                    fv.push_back(v0); fv.push_back(v2); fv.push_back(v3);
+                };
+                // Sun: warm glow + white-hot core.
+                add(0.00f, 0.30f, { 255, 235, 200, 255 }, 0.60f,  2.0f, 0.0f);
+                add(0.00f, 0.05f, { 255, 255, 255, 255 }, 1.00f, 10.0f, 0.0f);
+                // Chromatic ghosts along the sun -> centre axis.
+                add(0.30f, 0.06f, { 120, 160, 255, 255 }, 0.15f,  3.0f, 0.0f);
+                add(0.50f, 0.11f, { 255, 180,  90, 255 }, 0.12f,  2.0f, 0.0f);
+                add(0.62f, 0.04f, { 150, 255, 150, 255 }, 0.12f,  3.0f, 0.0f);
+                add(0.80f, 0.15f, { 255, 110,  90, 255 }, 0.09f,  1.5f, 0.0f);
+                add(1.10f, 0.08f, { 130, 150, 255, 255 }, 0.12f,  2.0f, 0.0f);
+                add(1.30f, 0.20f, { 255, 210, 140, 255 }, 0.07f,  1.2f, 0.0f);
+                // Halo ring around the screen centre.
+                add(1.00f, 0.55f, { 150, 180, 255, 255 }, 0.06f,  1.0f, 0.78f);
+
+                uint32_t n = (uint32_t)fv.size();
+                if (bgfx::getAvailTransientVertexBuffer(n, layout_) >= n) {
+                    bgfx::TransientVertexBuffer tvb;
+                    bgfx::allocTransientVertexBuffer(&tvb, n, layout_);
+                    std::memcpy(tvb.data, fv.data(), n * sizeof(Vertex));
+                    bgfx::setVertexBuffer(0, &tvb);
+                    bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_BLEND_ADD);
+                    bgfx::submit(1, flareProg_);   // view 1 = over the 3D scene, under the UI
+                }
+            }
         }
     }
 }
