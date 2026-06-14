@@ -15,6 +15,8 @@ BGFX_TARGET := program-bgfx
 BGFX_DIR    := build/bgfx
 BGFX_SUB    := third_party/bgfx.cmake
 SHADER_DIR  := src/renderer/bgfx/shaders
+ASSET_DIR   := src/renderer/bgfx
+TEX_ZIP     := $(ASSET_DIR)/bgfx.textures.zip
 BGFX_DEFS   := -DUSE_BGFX -D_USE_MATH_DEFINES -DBX_CONFIG_DEBUG=0
 BGFX_INCS   := -I$(BGFX_SUB)/bgfx/include -I$(BGFX_SUB)/bx/include -I$(BGFX_SUB)/bimg/include
 BGFX_LIBS   := $(BGFX_DIR)/cmake/bgfx/libbgfx.a \
@@ -30,6 +32,8 @@ ifeq ($(OS),Windows_NT)
     SHADERC      := $(BGFX_DIR)/cmake/bgfx/shaderc.exe
     CMAKE_GEN    := MinGW Makefiles
     RM           := del /Q
+    UNZIP        := tar -xf
+    UNZIP_DEST   := -C
 else
     UNAME_S := $(shell uname -s)
     ifeq ($(UNAME_S),Darwin)
@@ -42,6 +46,8 @@ else
     SHADERC   := $(BGFX_DIR)/cmake/bgfx/shaderc
     CMAKE_GEN := Unix Makefiles
     RM        := rm -f
+    UNZIP     := unzip -o
+    UNZIP_DEST := -d
 endif
 
 # ---------------------------------------------------------------------------
@@ -76,8 +82,14 @@ $(SHADER_DIR)/vs_%.bin: $(SHADER_DIR)/vs_%.sc $(SHADER_DIR)/varying.def.sc
 $(SHADER_DIR)/fs_%.bin: $(SHADER_DIR)/fs_%.sc $(SHADER_DIR)/varying.def.sc
 	$(SHADERC) -f $< -o $@ --type fragment --platform linux -p 150 -i $(BGFX_SUB)/bgfx/src --varyingdef $(SHADER_DIR)/varying.def.sc
 
-# One-time: fetch the bgfx submodule and build bgfx/bx/bimg + shaderc.
-bgfx-deps:
+# The texture DDS pack (~5 GB) lives in Git LFS beside the renderer; pull it on
+# demand only when the local copy is missing (e.g. skip-smudge clones), then
+# unzip the flat archive in place so the *.dds land in $(ASSET_DIR).
+$(TEX_ZIP):
+	git lfs pull --include "$(TEX_ZIP)"
+	$(UNZIP) $(TEX_ZIP) $(UNZIP_DEST) $(ASSET_DIR)
+
+bgfx-deps: $(TEX_ZIP)
 	git submodule update --init --recursive
 	cmake -S $(BGFX_SUB) -B $(BGFX_DIR) -G "$(CMAKE_GEN)" \
 	    -DCMAKE_BUILD_TYPE=Release -DBGFX_BUILD_EXAMPLES=OFF -DBGFX_BUILD_TOOLS=ON
