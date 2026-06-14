@@ -68,7 +68,7 @@ float fbm(vec3 p) {
 // the equirectangular UV, then applies the same day/night blend as the Earth.
 vec3 earthRefl(vec3 dv, vec3 L) {
     vec3 e = vec3(dv.x, -dv.z, dv.y);                       // view -> ECI (+Z north)
-    float u  = atan(e.y, e.x) * (0.5 / 3.14159265) + (12.0 / 360.0);
+    float u  = atan(e.y, e.x) * (0.5 / 3.14159265) + 0.5;
     float vt = acos(clamp(e.z, -1.0, 1.0)) / 3.14159265;
     vec2 uv = vec2(u, vt);
     vec3 ec = texture2D(s_color, uv).rgb;
@@ -126,7 +126,7 @@ void main() {
         if (tc > 0.0) {
             vec3 cd = normalize((v_wpos + L*tc) - u_earth.xyz);
             vec3 ce = vec3(cd.x, -cd.z, cd.y);
-            vec2 cuv = vec2(atan(ce.y, ce.x) * (0.5/3.14159265) + 12.0/360.0,
+            vec2 cuv = vec2(atan(ce.y, ce.x) * (0.5/3.14159265) + 0.5,
                             acos(clamp(ce.z, -1.0, 1.0)) / 3.14159265);
             Lo *= 1.0 - 0.7 * texture2D(s_cloud, cuv).x;
         }

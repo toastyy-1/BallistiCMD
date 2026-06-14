@@ -153,7 +153,7 @@ void main() {
     float tc  = -bC + sqrt(max(bC*bC - (dot(ocC, ocC) - Rc*Rc), 0.0));
     vec3  cp  = normalize((v_wpos + L*tc) - u_earthCenter.xyz);
     vec3  ce  = vec3(cp.x, -cp.z, cp.y);                     // view -> ECI
-    vec2  cuv = vec2(atan(ce.y, ce.x) * (0.5/3.14159265) + 12.0/360.0,
+    vec2  cuv = vec2(atan(ce.y, ce.x) * (0.5/3.14159265) + 0.5,
                      acos(clamp(ce.z, -1.0, 1.0)) / 3.14159265);
     // Match the cloud's apparent opacity: it is drawn as 5 shells at alpha 0.22
     // (keep this in sync with shellAlpha in bgfx_backend.cpp), so its coverage

@@ -369,7 +369,11 @@ void BgfxBackend::DrawRocket(const RocketFrame& f) {
 
 void BgfxBackend::ensureEarth() {
     if (earthMesh_) return;
-    const float kLonOffset = 12.0f / 360.0f;
+    // Half-turn: aligns the Greenwich-centred equirectangular map (u=0.5 -> 0 deg)
+    // with the ECI frame the rocket is placed in, so launch sites land correctly
+    // (e.g. Knoxville at -83.94 deg, not 108 deg E / China). Keep this in sync with
+    // the same offset hardcoded in fs_earth, fs_rocket and vs_patch.
+    const float kLonOffset = 0.5f;
     // High tessellation so vertex displacement has the resolution to show real
     // relief. 2048 rings/sectors -> ~4.2M verts / ~25M tris, 32-bit indices.
     earthMesh_  = CreateMesh(geom::buildSphere((float)EARTH_RADIUS_M, 2048, 2048, kLonOffset));

@@ -37,7 +37,7 @@ void main() {
     // Body (mesh) direction for UV + frame-stable noise. viewBasis maps body
     // (x,y,z) -> view (x,z,-y), so its inverse is (x,-z,y).
     vec3 bdir = vec3(dir.x, -dir.z, dir.y);
-    vec2 uv = vec2(atan(bdir.y, bdir.x) * (0.5/3.14159265) + 12.0/360.0,
+    vec2 uv = vec2(atan(bdir.y, bdir.x) * (0.5/3.14159265) + 0.5,
                    acos(clamp(bdir.z, -1.0, 1.0)) / 3.14159265);
 
     // Band-limit the displacement to the local vertex spacing (mip-correct height

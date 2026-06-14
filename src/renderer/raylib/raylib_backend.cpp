@@ -201,7 +201,7 @@ void RaylibBackend::ensureEarth() {
     // Sphere in metres (radius EARTH_RADIUS_M) so the renderer's view basis
     // (metres -> km) applies to it like everything else. The 12 deg east offset
     // matches the texture alignment.
-    const float kLonOffset = 12.0f / 360.0f;
+    const float kLonOffset = 0.5f;   // half-turn: align Greenwich-centred map with ECI (see bgfx backend)
     earthMesh_ = CreateMesh(geom::buildSphere((float)EARTH_RADIUS_M, 128, 128, kLonOffset));
     earthTex_  = LoadTexture("src/renderer/raylib/world.jpg");
 }
