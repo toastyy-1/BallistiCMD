@@ -3,26 +3,33 @@ $output v_texcoord0, v_wpos, v_objpos
 
 #include <bgfx_shader.sh>
 
-// Camera-following terrain LOD patch. A flat [-1,1]^2 grid (a_position.xy = grid
-// coords) becomes a density-graded spherical cap centred under the camera: dense
+// Near-surface terrain LOD patch. A flat [-1,1]^2 grid (a_position.xy = grid
+// coords) becomes a density-graded spherical cap over the sub-camera point: dense
 // underfoot, reaching the horizon at the edge, displacing the height map at full
-// resolution. While active it is the SOLE Earth surface (the global sphere is not
-// drawn), so there is no z-fighting, and it is built in a floating-origin frame
-// (positions relative to the camera) so fine geometry doesn't shimmer at planet
-// scale. It outputs the earth's varyings so fs_earth shades it identically.
+// resolution. The grid's TOPOLOGY follows the camera, but its geometry is built
+// from a sub-camera point SNAPPED to the height-map texel grid (see u_patchC vs
+// u_patchTrue and the CPU side in DrawEarth): this anchors every vertex to a fixed
+// terrain point for sub-texel camera motion, so the surface no longer swims as you
+// move. While active it is the SOLE Earth surface (the global sphere is not drawn),
+// so there is no z-fighting, and it is built in a floating-origin frame (positions
+// relative to the camera) so fine geometry doesn't shimmer at planet scale. It
+// outputs the earth's varyings so fs_earth shades it identically.
 SAMPLER2D(s_bump, 1);          // height map (same texture as the earth)
 uniform vec4 u_depth;          // x: far plane (logarithmic depth)
-uniform vec4 u_patchC;         // xyz: view-space dir under camera, w: tan(half-angle)
+uniform vec4 u_patchC;         // xyz: SNAPPED view-space dir under camera, w: tan(half-angle)
 uniform vec4 u_patchE;         // xyz: view-space east tangent,  w: earth radius (km)
-uniform vec4 u_patchN;         // xyz: view-space north tangent, w: camera altitude (km)
+uniform vec4 u_patchN;         // xyz: view-space north tangent, w: snapped altitude (km)
 uniform vec4 u_patchCam;       // xyz: camera position (world km), w: displacement scale (km)
+uniform vec4 u_patchTrue;      // xyz: TRUE view-space dir under camera, w: true altitude (km)
 
 void main() {
-    vec3  Cv        = u_patchC.xyz;
+    vec3  Cv        = u_patchC.xyz;     // snapped centre: defines the (anchored) cap shape
     float tanHa     = u_patchC.w;
     float Rkm       = u_patchE.w;
     float alt       = u_patchN.w;
     float dispScale = u_patchCam.w;
+    vec3  Cvt       = u_patchTrue.xyz;  // true centre: floating-origin reconstruction only
+    float altt      = u_patchTrue.w;
 
     // Density-graded grid: the exponent packs vertices toward the centre (under
     // the camera) while the edges still stretch out to the horizon.
@@ -56,10 +63,13 @@ void main() {
     float h    = texture2DLod(s_bump, uv, lod).x;
     float disp = h * dispScale;   // km
 
-    // Floating-origin world position (km). Every term is small near the camera --
-    // R*(dir-Cv) is the arc offset from the sub-camera point -- so there is no
-    // catastrophic cancellation and the fine relief stays stable frame to frame.
-    vec3 wpos = u_patchCam.xyz + (dir - Cv) * Rkm + dir * disp - Cv * alt;
+    // Floating-origin world position (km). Uses the TRUE camera centre/altitude so
+    // the result equals center + dir*(R+disp): since dir comes from the snapped
+    // centre, wpos is independent of sub-texel camera motion (the planet centre is
+    // camera-independent), which is what kills the swim. Every term is small near
+    // the camera -- R*(dir-Cvt) is the arc offset from the sub-camera point -- so
+    // there is no catastrophic cancellation and the fine relief stays stable.
+    vec3 wpos = u_patchCam.xyz + (dir - Cvt) * Rkm + dir * disp - Cvt * altt;
 
     v_wpos      = wpos;                          // world (shifted) km
     v_objpos    = bdir * (Rkm * 1000.0);         // body metres (frame-stable noise domain)

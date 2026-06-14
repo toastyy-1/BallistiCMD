@@ -85,7 +85,8 @@ private:
     bgfx::UniformHandle u_rayFwd_ = BGFX_INVALID_HANDLE, u_rayRight_ = BGFX_INVALID_HANDLE,
                         u_rayUp_ = BGFX_INVALID_HANDLE;
     bgfx::UniformHandle u_patchC_ = BGFX_INVALID_HANDLE, u_patchE_ = BGFX_INVALID_HANDLE,
-                        u_patchN_ = BGFX_INVALID_HANDLE, u_patchCam_ = BGFX_INVALID_HANDLE;
+                        u_patchN_ = BGFX_INVALID_HANDLE, u_patchCam_ = BGFX_INVALID_HANDLE,
+                        u_patchTrue_ = BGFX_INVALID_HANDLE;
     bgfx::TextureHandle white_ = BGFX_INVALID_HANDLE;
 
     std::vector<GpuMesh>             meshes_;    // handle = index + 1

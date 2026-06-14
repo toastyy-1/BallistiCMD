@@ -146,6 +146,7 @@ void BgfxBackend::Init(int width, int height, const char* title) {
     u_patchE_      = bgfx::createUniform("u_patchE",     bgfx::UniformType::Vec4);
     u_patchN_      = bgfx::createUniform("u_patchN",     bgfx::UniformType::Vec4);
     u_patchCam_    = bgfx::createUniform("u_patchCam",   bgfx::UniformType::Vec4);
+    u_patchTrue_   = bgfx::createUniform("u_patchTrue",  bgfx::UniformType::Vec4);
 
     const uint8_t whitePix[4] = { 255, 255, 255, 255 };
     white_ = bgfx::createTexture2D(1, 1, false, 1, bgfx::TextureFormat::RGBA8, 0,
@@ -174,7 +175,8 @@ void BgfxBackend::Shutdown() {
     for (bgfx::UniformHandle u : { s_tex_, u_tint_, u_depth_, u_light_, u_heat_, u_earth_, s_color_, s_bump_, s_night_, s_rough_,
                                    u_sunDir_, u_earthCenter_, u_camPos_, u_dispScale_,
                                    s_cloud_, u_cloudAlpha_, u_cloudDisp_, u_atmos_,
-                                   u_rayFwd_, u_rayRight_, u_rayUp_ })
+                                   u_rayFwd_, u_rayRight_, u_rayUp_,
+                                   u_patchC_, u_patchE_, u_patchN_, u_patchCam_, u_patchTrue_ })
         if (bgfx::isValid(u)) bgfx::destroy(u);
     bgfx::shutdown();
     if (window_) glfwDestroyWindow(window_);
@@ -492,23 +494,62 @@ void BgfxBackend::DrawEarth(const EarthFrame& f) {
     if (patchActive) {
         const GpuMesh& pm = meshes_[patchMesh_ - 1];
         float Rkm = (float)EARTH_RADIUS_KM;
-        // View-space tangent frame at the sub-camera point (view +Y = north pole).
-        RVec3 Cv   = rmath::normalize(rmath::sub(f.cam_pos, f.center));
+
+        // True sub-camera direction (view space) and altitude. These drive the
+        // floating-origin reconstruction in the shader, so they must stay exact.
+        RVec3 Cvt    = rmath::normalize(rmath::sub(f.cam_pos, f.center));
+        float altt   = fmaxf(camAlt, 0.02f);
+
+        // World-anchored cap: build the patch geometry from a sub-camera point that
+        // is SNAPPED to the height map's texel grid (and an altitude snapped to a
+        // geometric ladder), not from the live camera. The grid is camera-locked in
+        // *topology*, so without this its vertices slide across the height field as
+        // you move and the surface swims. Snapping freezes every vertex's world
+        // position for sub-texel camera motion (zero swim); on a texel crossing the
+        // cap shifts by exactly one texel of a texel-resolution field, which is
+        // imperceptible. The shader reconstructs wpos = center + dir*(R+disp) from
+        // the snapped dir, so it is independent of the true camera between snaps.
+        constexpr float kTexel    = 3.14159265f / 16384.0f;  // rad/texel (16384 rows over pi)
+        constexpr int   kSnapTex  = 1;                        // snap granularity, in texels
+        constexpr float kAltLadder = 0.06f;                  // altitude snap: ~4% geometric steps
+        const float snap = kSnapTex * kTexel;
+
+        // Snap the sub-camera point on the lon/colat grid (== the height-map grid).
+        // view->body is (x,-z,y) (inverse of viewBasis), matching vs_patch.
+        RVec3 bC   = { Cvt.x, -Cvt.z, Cvt.y };
+        float lon  = atan2f(bC.y, bC.x);
+        float cola = acosf(fmaxf(-1.0f, fminf(1.0f, bC.z)));
+        lon  = roundf(lon  / snap) * snap;
+        cola = roundf(cola / snap) * snap;
+        cola = fmaxf(snap, fminf(3.14159265f - snap, cola));
+        float sc = sinf(cola);
+        RVec3 bS = { sc * cosf(lon), sc * sinf(lon), cosf(cola) };
+        RVec3 Cv = { bS.x, bS.z, -bS.y };                    // snapped centre (view space)
+
+        // Snapped altitude (ceil to a geometric ladder so the cap is stable AND
+        // always over-covers the true horizon -- no limb gap).
+        float alts = (altt > 0.05f)
+                   ? exp2f(ceilf(log2f(altt) / kAltLadder) * kAltLadder) : altt;
+
+        // Geographic tangent frame at the snapped centre (view +Y = north pole).
         RVec3 pole = fabsf(Cv.y) < 0.99f ? RVec3{0,1,0} : RVec3{1,0,0};
         RVec3 Ev   = rmath::normalize(rmath::cross(pole, Cv));
         RVec3 Nv   = rmath::cross(Cv, Ev);
-        // Cap reaches just past the geometric horizon so it covers all visible ground.
-        float horizon = acosf(Rkm / (Rkm + fmaxf(camAlt, 0.02f)));
-        float tanHa   = tanf(fminf(horizon * 1.06f, 1.4f));
+        // Cap reaches past the geometric horizon (snapped alt) so it covers all
+        // visible ground; margin also absorbs the altitude snap step.
+        float horizon = acosf(Rkm / (Rkm + alts));
+        float tanHa   = tanf(fminf(horizon * 1.08f, 1.4f));
 
         float pc[4]   = { Cv.x, Cv.y, Cv.z, tanHa };
         float pe[4]   = { Ev.x, Ev.y, Ev.z, Rkm };
-        float pn[4]   = { Nv.x, Nv.y, Nv.z, camAlt };
+        float pn[4]   = { Nv.x, Nv.y, Nv.z, alts };
         float pcam[4] = { f.cam_pos.x, f.cam_pos.y, f.cam_pos.z, 8.849f };  // disp scale (km)
+        float ptr[4]  = { Cvt.x, Cvt.y, Cvt.z, altt };       // true centre/alt: reconstruction
         bgfx::setUniform(u_patchC_, pc);
         bgfx::setUniform(u_patchE_, pe);
         bgfx::setUniform(u_patchN_, pn);
         bgfx::setUniform(u_patchCam_, pcam);
+        bgfx::setUniform(u_patchTrue_, ptr);
         bgfx::setTransform(rmath::identity().m);   // positions already in world km
         bgfx::setVertexBuffer(0, pm.vbh);
         bgfx::setIndexBuffer(pm.ibh);
