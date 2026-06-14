@@ -35,4 +35,10 @@ Mesh buildCone(int sides);
 // shifts the texture east as a fraction of a full turn.
 Mesh buildSphere(float radius, int rings, int sectors, float lonOffset = 0.0f);
 
+// Flat (n+1)x(n+1) grid spanning [-1,1]^2 in the XY plane (z = 0). Used as the
+// camera-following terrain LOD patch: vs_patch reads pos.xy as grid coordinates,
+// projects them onto the sphere under the camera, and displaces at high
+// resolution. Normals/UVs/colour are unused by that shader.
+Mesh buildGrid(int n);
+
 }

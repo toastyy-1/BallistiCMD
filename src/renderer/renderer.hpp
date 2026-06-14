@@ -53,6 +53,9 @@ private:
     float yaw   = 0.0f;
     float pitch = 0.3f;
     float dist  = 0.05f;  // 50 m: framed on the rocket; scroll out to see the Earth
+    // Point the camera orbits (km, render-scene frame). Origin = the rocket; WASD
+    // flies it across the surface so you can inspect terrain away from the rocket.
+    RVec3 pivot_ { 0.0f, 0.0f, 0.0f };
 
     // Exhaust plume state. The sim exposes no "firing" flag, so we infer it from
     // propellant being burned and smooth it into a level that drives the plume.

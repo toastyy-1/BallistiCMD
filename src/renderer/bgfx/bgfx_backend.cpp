@@ -109,6 +109,9 @@ void BgfxBackend::Init(int width, int height, const char* title) {
                                      loadShaderFile("src/renderer/bgfx/shaders/fs_earth.bin"), true);
     cloudProg_ = bgfx::createProgram(loadShaderFile("src/renderer/bgfx/shaders/vs_cloud.bin"),
                                      loadShaderFile("src/renderer/bgfx/shaders/fs_cloud.bin"), true);
+    // Terrain LOD patch reuses the earth fragment shader, so it shades identically.
+    patchProg_ = bgfx::createProgram(loadShaderFile("src/renderer/bgfx/shaders/vs_patch.bin"),
+                                     loadShaderFile("src/renderer/bgfx/shaders/fs_earth.bin"), true);
     atmosProg_ = bgfx::createProgram(loadShaderFile("src/renderer/bgfx/shaders/vs_atmos.bin"),
                                      loadShaderFile("src/renderer/bgfx/shaders/fs_atmos.bin"), true);
     flareProg_ = bgfx::createProgram(loadShaderFile("src/renderer/bgfx/shaders/vs_flare.bin"),
@@ -139,6 +142,10 @@ void BgfxBackend::Init(int width, int height, const char* title) {
     u_rayFwd_      = bgfx::createUniform("u_rayFwd",     bgfx::UniformType::Vec4);
     u_rayRight_    = bgfx::createUniform("u_rayRight",   bgfx::UniformType::Vec4);
     u_rayUp_       = bgfx::createUniform("u_rayUp",      bgfx::UniformType::Vec4);
+    u_patchC_      = bgfx::createUniform("u_patchC",     bgfx::UniformType::Vec4);
+    u_patchE_      = bgfx::createUniform("u_patchE",     bgfx::UniformType::Vec4);
+    u_patchN_      = bgfx::createUniform("u_patchN",     bgfx::UniformType::Vec4);
+    u_patchCam_    = bgfx::createUniform("u_patchCam",   bgfx::UniformType::Vec4);
 
     const uint8_t whitePix[4] = { 255, 255, 255, 255 };
     white_ = bgfx::createTexture2D(1, 1, false, 1, bgfx::TextureFormat::RGBA8, 0,
@@ -159,6 +166,7 @@ void BgfxBackend::Shutdown() {
     if (bgfx::isValid(generic_))    bgfx::destroy(generic_);
     if (bgfx::isValid(earthProg_))  bgfx::destroy(earthProg_);
     if (bgfx::isValid(cloudProg_))  bgfx::destroy(cloudProg_);
+    if (bgfx::isValid(patchProg_))  bgfx::destroy(patchProg_);
     if (bgfx::isValid(atmosProg_))  bgfx::destroy(atmosProg_);
     if (bgfx::isValid(flareProg_))  bgfx::destroy(flareProg_);
     if (bgfx::isValid(rocketProg_)) bgfx::destroy(rocketProg_);
@@ -192,7 +200,14 @@ FrameInput BgfxBackend::PollInput() {
 
     bool left = glfwGetMouseButton(window_, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
     float w = wheel_; wheel_ = 0.0f;
-    return FrameInput{ dx, dy, w, left };
+
+    auto down = [&](int k){ return glfwGetKey(window_, k) == GLFW_PRESS; };
+    float mx = (down(GLFW_KEY_D) ? 1.0f : 0.0f) - (down(GLFW_KEY_A) ? 1.0f : 0.0f);
+    float my = (down(GLFW_KEY_E) ? 1.0f : 0.0f) - (down(GLFW_KEY_Q) ? 1.0f : 0.0f);
+    float mz = (down(GLFW_KEY_W) ? 1.0f : 0.0f) - (down(GLFW_KEY_S) ? 1.0f : 0.0f);
+    bool boost = down(GLFW_KEY_LEFT_SHIFT) || down(GLFW_KEY_RIGHT_SHIFT);
+    bool recenter = down(GLFW_KEY_F);
+    return FrameInput{ dx, dy, w, left, mx, my, mz, boost, recenter };
 }
 
 float  BgfxBackend::FrameTime() const { return (float)frameDt_; }
@@ -379,6 +394,10 @@ void BgfxBackend::ensureEarth() {
     // Sphere for the cloud shells. Denser than a plain textured sphere would need
     // so the per-vertex noise displacement resolves smoothly. 32-bit indices.
     cloudMesh_  = CreateMesh(geom::buildSphere((float)EARTH_RADIUS_M, 512, 512, kLonOffset));
+
+    // Camera-following terrain LOD patch: a dense flat grid the vertex shader
+    // wraps onto the sphere under the camera and displaces at full map resolution.
+    patchMesh_  = CreateMesh(geom::buildGrid(192));
 }
 
 void BgfxBackend::DrawEarth(const EarthFrame& f) {
@@ -428,6 +447,16 @@ void BgfxBackend::DrawEarth(const EarthFrame& f) {
         bgfx::submit(0, atmosProg_);
     }
 
+    // Camera altitude (km). When low, the high-detail terrain patch REPLACES the
+    // global sphere as the surface (they're nearly coincident -- drawing both
+    // z-fights into noise), so decide before the earth draw whether to skip it.
+    float dcx = f.cam_pos.x - f.center.x, dcy = f.cam_pos.y - f.center.y, dcz = f.cam_pos.z - f.center.z;
+    float camAlt = sqrtf(dcx*dcx + dcy*dcy + dcz*dcz) - (float)EARTH_RADIUS_KM;
+    // Patch is the surface near the ground; by 90 km it has geomorphed (vs_patch's
+    // altitude LOD bias) down to the global sphere's resolution, so the handoff is
+    // seamless. Above that the global sphere takes over.
+    bool  patchActive = patchMesh_ && camAlt < 90.0f;
+
     setVec4(u_sunDir_,      f.sun_dir);
     setVec4(u_earthCenter_, f.center);
     setVec4(u_camPos_,      f.cam_pos);
@@ -441,25 +470,66 @@ void BgfxBackend::DrawEarth(const EarthFrame& f) {
     bgfx::setTexture(3, s_rough_, earthRough_);
     bgfx::setTexture(4, s_cloud_, earthCloud_);  // cloud shadows on the ground
 
-    bgfx::setTransform(f.model.m);
-    bgfx::setVertexBuffer(0, g.vbh);
-    bgfx::setIndexBuffer(g.ibh);
-    bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_WRITE_Z
-                   | BGFX_STATE_DEPTH_TEST_LESS | BGFX_STATE_CULL_CW);
-    bgfx::submit(0, earthProg_);
+    if (!patchActive) {                          // global sphere = far field / high up
+        bgfx::setTransform(f.model.m);
+        bgfx::setVertexBuffer(0, g.vbh);
+        bgfx::setIndexBuffer(g.ibh);
+        bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_WRITE_Z
+                       | BGFX_STATE_DEPTH_TEST_LESS | BGFX_STATE_CULL_CW);
+        bgfx::submit(0, earthProg_);
+    }
+
+    // --- Terrain LOD patch (near-surface): a density-graded cap that follows the
+    // camera, covering the visible ground to the horizon (dense underfoot, coarse
+    // toward the limb) and displacing the height map at full resolution. SOLE
+    // surface while active (no global sphere -> no z-fight), reuses fs_earth for
+    // identical shading, and built in a floating-origin frame so the fine geometry
+    // stays precise/stable at planet scale. See vs_patch.sc.
+    if (patchActive) {
+        const GpuMesh& pm = meshes_[patchMesh_ - 1];
+        float Rkm = (float)EARTH_RADIUS_KM;
+        // View-space tangent frame at the sub-camera point (view +Y = north pole).
+        RVec3 Cv   = rmath::normalize(rmath::sub(f.cam_pos, f.center));
+        RVec3 pole = fabsf(Cv.y) < 0.99f ? RVec3{0,1,0} : RVec3{1,0,0};
+        RVec3 Ev   = rmath::normalize(rmath::cross(pole, Cv));
+        RVec3 Nv   = rmath::cross(Cv, Ev);
+        // Cap reaches just past the geometric horizon so it covers all visible ground.
+        float horizon = acosf(Rkm / (Rkm + fmaxf(camAlt, 0.02f)));
+        float tanHa   = tanf(fminf(horizon * 1.06f, 1.4f));
+
+        float pc[4]   = { Cv.x, Cv.y, Cv.z, tanHa };
+        float pe[4]   = { Ev.x, Ev.y, Ev.z, Rkm };
+        float pn[4]   = { Nv.x, Nv.y, Nv.z, camAlt };
+        float pcam[4] = { f.cam_pos.x, f.cam_pos.y, f.cam_pos.z, 8.849f };  // disp scale (km)
+        bgfx::setUniform(u_patchC_, pc);
+        bgfx::setUniform(u_patchE_, pe);
+        bgfx::setUniform(u_patchN_, pn);
+        bgfx::setUniform(u_patchCam_, pcam);
+        bgfx::setTransform(rmath::identity().m);   // positions already in world km
+        bgfx::setVertexBuffer(0, pm.vbh);
+        bgfx::setIndexBuffer(pm.ibh);
+        bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_WRITE_Z
+                       | BGFX_STATE_DEPTH_TEST_LESS);   // no cull: graded cap faces camera
+        bgfx::submit(0, patchProg_);
+    }
 
     // Cloud shells: concentric cloud-map layers above the terrain. Drawn
     // inner->outer (back-to-front for the visible near hemisphere) with depth
     // test on (mountains occlude clouds) but no depth write (shells blend). The
     // slight radius offsets give a parallax / volumetric feel as the camera moves.
-    if (cloudMesh_) {
+    // Fade the shells out as the camera descends into the 2-12 km layer: seen from
+    // below/inside, the translucent spheres wash out the ground and you can't tell
+    // cloud from terrain. Full clouds above ~35 km, gone by ~10 km.
+    float cloudFade = (camAlt - 10.0f) / 25.0f;
+    cloudFade = cloudFade < 0.0f ? 0.0f : (cloudFade > 1.0f ? 1.0f : cloudFade);
+    if (cloudMesh_ && cloudFade > 0.001f) {
         const GpuMesh& cm  = meshes_[cloudMesh_ - 1];
         const int   kShells    = 5;
         const float baseKm     = 2.0f;    // cloud base ~2 km (low cumulus)
         const float gapKm      = 2.5f;    // shells span 2..12 km -> tops at the tropopause
-        const float shellAlpha = 0.22f;   // per-shell opacity; thin enough that the
-                                          // co-located ground shadow shows through
-                                          // (keep in sync with fs_earth's shadow curve)
+        const float shellAlpha = 0.22f * cloudFade;  // per-shell opacity (x altitude fade);
+                                          // base 0.22 thin enough the ground shadow shows
+                                          // through (keep in sync with fs_earth shadow curve)
         const float dispAmp    = 3000.0f; // noise amplitude (m); ~> gap so shells merge
         const float dispFreq   = 10.0f;    // noise feature scale over the sphere
         for (int i = 0; i < kShells; ++i) {

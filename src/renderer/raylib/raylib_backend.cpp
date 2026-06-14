@@ -94,10 +94,16 @@ bool RaylibBackend::ShouldClose() const { return WindowShouldClose(); }
 
 FrameInput RaylibBackend::PollInput() {
     Vector2 d = GetMouseDelta();
+    float mx = (IsKeyDown(KEY_D) ? 1.0f : 0.0f) - (IsKeyDown(KEY_A) ? 1.0f : 0.0f);
+    float my = (IsKeyDown(KEY_E) ? 1.0f : 0.0f) - (IsKeyDown(KEY_Q) ? 1.0f : 0.0f);
+    float mz = (IsKeyDown(KEY_W) ? 1.0f : 0.0f) - (IsKeyDown(KEY_S) ? 1.0f : 0.0f);
+    bool boost = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
+    bool recenter = IsKeyDown(KEY_F);
     return FrameInput {
         d.x, d.y,
         GetMouseWheelMove(),
         IsMouseButtonDown(MOUSE_BUTTON_LEFT),
+        mx, my, mz, boost, recenter,
     };
 }
 

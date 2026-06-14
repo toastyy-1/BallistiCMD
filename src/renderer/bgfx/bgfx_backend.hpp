@@ -63,6 +63,7 @@ private:
     bgfx::ProgramHandle generic_ = BGFX_INVALID_HANDLE;
     bgfx::ProgramHandle earthProg_ = BGFX_INVALID_HANDLE;
     bgfx::ProgramHandle cloudProg_ = BGFX_INVALID_HANDLE;
+    bgfx::ProgramHandle patchProg_ = BGFX_INVALID_HANDLE;    // camera-following terrain LOD patch
     bgfx::ProgramHandle atmosProg_ = BGFX_INVALID_HANDLE;
     bgfx::ProgramHandle flareProg_ = BGFX_INVALID_HANDLE;
     bgfx::ProgramHandle rocketProg_ = BGFX_INVALID_HANDLE;   // PBR + grime (lit DrawModel)
@@ -83,6 +84,8 @@ private:
                         u_cloudDisp_ = BGFX_INVALID_HANDLE, u_atmos_ = BGFX_INVALID_HANDLE;
     bgfx::UniformHandle u_rayFwd_ = BGFX_INVALID_HANDLE, u_rayRight_ = BGFX_INVALID_HANDLE,
                         u_rayUp_ = BGFX_INVALID_HANDLE;
+    bgfx::UniformHandle u_patchC_ = BGFX_INVALID_HANDLE, u_patchE_ = BGFX_INVALID_HANDLE,
+                        u_patchN_ = BGFX_INVALID_HANDLE, u_patchCam_ = BGFX_INVALID_HANDLE;
     bgfx::TextureHandle white_ = BGFX_INVALID_HANDLE;
 
     std::vector<GpuMesh>             meshes_;    // handle = index + 1
@@ -92,6 +95,7 @@ private:
     RocketModel         rocket_;
     MeshHandle          earthMesh_ = 0;
     MeshHandle          cloudMesh_ = 0;
+    MeshHandle          patchMesh_ = 0;
     bgfx::TextureHandle earthColor_ = BGFX_INVALID_HANDLE,
                         earthBump_  = BGFX_INVALID_HANDLE,
                         earthNight_ = BGFX_INVALID_HANDLE,

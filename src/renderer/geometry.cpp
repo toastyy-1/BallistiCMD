@@ -132,4 +132,25 @@ Mesh buildSphere(float radius, int rings, int sectors, float lonOffset) {
     return m;
 }
 
+Mesh buildGrid(int n) {
+    Mesh m;
+    for (int i = 0; i <= n; ++i) {
+        float gy = (float)i / n * 2.0f - 1.0f;
+        for (int j = 0; j <= n; ++j) {
+            float gx = (float)j / n * 2.0f - 1.0f;
+            m.verts.push_back({ {gx, gy, 0.0f}, {0,0,1}, 0.0f, 0.0f, kWhite });
+        }
+    }
+    int stride = n + 1;
+    for (int i = 0; i < n; ++i) {
+        for (int j = 0; j < n; ++j) {
+            uint32_t a = i*stride + j,     b = a + 1;
+            uint32_t c = (i+1)*stride + j, d = c + 1;
+            m.idx.push_back(a); m.idx.push_back(c); m.idx.push_back(b);
+            m.idx.push_back(b); m.idx.push_back(c); m.idx.push_back(d);
+        }
+    }
+    return m;
+}
+
 } // namespace renderer::geom

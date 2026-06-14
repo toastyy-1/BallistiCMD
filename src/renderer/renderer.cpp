@@ -95,17 +95,32 @@ void Renderer::HandleInput() {
     }
     if (in.wheel != 0.0f) dist *= powf(0.9f, in.wheel);
     dist = clampf(dist, 0.02f, EARTH_RADIUS_KM * 50.0f);  // 20 m .. 50 Earth radii
+
+    // Free-fly: translate the orbit pivot along the camera's own axes. Speed
+    // scales with the zoom distance (and FrameTime for frame-rate independence)
+    // so it crawls when zoomed to the surface and covers ground fast from orbit.
+    if (in.move_x != 0.0f || in.move_y != 0.0f || in.move_z != 0.0f) {
+        float cy = cosf(yaw), sy = sinf(yaw), cp = cosf(pitch), sp = sinf(pitch);
+        RVec3 fwd   = { -cp*sy, -sp, -cp*cy };   // eye -> pivot (matches BuildCamera)
+        RVec3 right = {  cy,    0.0f, -sy   };    // camera right, horizontal
+        float s = dist * (in.boost ? 4.0f : 1.0f) * backend_.FrameTime();
+        // right * strafe + worldUp * lift + fwd * forward  (worldUp = {0,1,0})
+        pivot_.x += (right.x*in.move_x + fwd.x*in.move_z) * s;
+        pivot_.y += (in.move_y         + fwd.y*in.move_z) * s;
+        pivot_.z += (right.z*in.move_x + fwd.z*in.move_z) * s;
+    }
+    if (in.recenter) pivot_ = { 0.0f, 0.0f, 0.0f };
 }
 
 RCamera Renderer::BuildCamera() const {
-    // Orbit the world origin (where the rocket sits in the shifted scene).
+    // Orbit the pivot (the rocket at the origin by default; flown by WASD).
     return RCamera {
         {
-            dist * cosf(pitch) * sinf(yaw),
-            dist * sinf(pitch),
-            dist * cosf(pitch) * cosf(yaw),
+            pivot_.x + dist * cosf(pitch) * sinf(yaw),
+            pivot_.y + dist * sinf(pitch),
+            pivot_.z + dist * cosf(pitch) * cosf(yaw),
         },
-        { 0, 0, 0 },
+        pivot_,
         { 0, 1, 0 },
         60.0f,
     };
