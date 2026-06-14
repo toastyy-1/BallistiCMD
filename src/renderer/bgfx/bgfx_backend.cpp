@@ -130,6 +130,7 @@ void BgfxBackend::Init(int width, int height, const char* title) {
     s_color_       = bgfx::createUniform("s_color",      bgfx::UniformType::Sampler);
     s_bump_        = bgfx::createUniform("s_bump",       bgfx::UniformType::Sampler);
     s_night_       = bgfx::createUniform("s_night",      bgfx::UniformType::Sampler);
+    s_emiss_       = bgfx::createUniform("s_emiss",      bgfx::UniformType::Sampler);
     s_rough_       = bgfx::createUniform("s_rough",      bgfx::UniformType::Sampler);
     u_sunDir_      = bgfx::createUniform("u_sunDir",     bgfx::UniformType::Vec4);
     u_earthCenter_ = bgfx::createUniform("u_earthCenter",bgfx::UniformType::Vec4);
@@ -163,6 +164,7 @@ void BgfxBackend::Shutdown() {
     if (bgfx::isValid(earthNight_)) bgfx::destroy(earthNight_);
     if (bgfx::isValid(earthCloud_)) bgfx::destroy(earthCloud_);
     if (bgfx::isValid(earthRough_)) bgfx::destroy(earthRough_);
+    if (bgfx::isValid(earthEmiss_)) bgfx::destroy(earthEmiss_);
     if (bgfx::isValid(white_))      bgfx::destroy(white_);
     if (bgfx::isValid(generic_))    bgfx::destroy(generic_);
     if (bgfx::isValid(earthProg_))  bgfx::destroy(earthProg_);
@@ -172,7 +174,7 @@ void BgfxBackend::Shutdown() {
     if (bgfx::isValid(flareProg_))  bgfx::destroy(flareProg_);
     if (bgfx::isValid(rocketProg_)) bgfx::destroy(rocketProg_);
     if (bgfx::isValid(heatProg_))   bgfx::destroy(heatProg_);
-    for (bgfx::UniformHandle u : { s_tex_, u_tint_, u_depth_, u_light_, u_heat_, u_earth_, s_color_, s_bump_, s_night_, s_rough_,
+    for (bgfx::UniformHandle u : { s_tex_, u_tint_, u_depth_, u_light_, u_heat_, u_earth_, s_color_, s_bump_, s_night_, s_rough_, s_emiss_,
                                    u_sunDir_, u_earthCenter_, u_camPos_, u_dispScale_,
                                    s_cloud_, u_cloudAlpha_, u_cloudDisp_, u_atmos_,
                                    u_rayFwd_, u_rayRight_, u_rayUp_,
@@ -394,6 +396,7 @@ void BgfxBackend::ensureEarth() {
     earthColor_ = loadDDS("src/renderer/bgfx/Earth-Color-Map-32768x16384.dds");
     earthBump_  = loadDDS("src/renderer/bgfx/Earth-Bump-Map-32768x16384.dds");
     earthNight_ = loadDDS("src/renderer/bgfx/Earth-Night-Map-32768x16384.dds");
+    earthEmiss_ = loadDDS("src/renderer/bgfx/Earth-Night-Emission-Map-32768x16384.dds");  // white = light source strength
     earthCloud_ = loadDDS("src/renderer/bgfx/Earth-Cloud-Map-32768x16384.dds");
     earthRough_ = loadDDS("src/renderer/bgfx/Earth-Roughness-Map-32768x16384.dds");
 
@@ -448,6 +451,8 @@ void BgfxBackend::DrawEarth(const EarthFrame& f) {
         d[0] = Vertex{ { -1, -1, 0 }, {0,0,0}, 0, 0, kWhite };   // full-screen triangle
         d[1] = Vertex{ {  3, -1, 0 }, {0,0,0}, 0, 0, kWhite };
         d[2] = Vertex{ { -1,  3, 0 }, {0,0,0}, 0, 0, kWhite };
+        bgfx::setTexture(0, s_night_, bgfx::isValid(earthNight_) ? earthNight_ : white_);  // light-pollution colour
+        bgfx::setTexture(1, s_emiss_, bgfx::isValid(earthEmiss_) ? earthEmiss_ : white_);  // light-pollution strength
         bgfx::setVertexBuffer(0, &tvb);
         bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_BLEND_ADD);
         bgfx::submit(0, atmosProg_);
@@ -588,6 +593,8 @@ void BgfxBackend::DrawEarth(const EarthFrame& f) {
             bgfx::setUniform(u_cloudDisp_, cd);
             bgfx::setUniform(u_depth_, depth);
             bgfx::setTexture(0, s_cloud_, earthCloud_);
+            bgfx::setTexture(1, s_night_, bgfx::isValid(earthNight_) ? earthNight_ : white_);  // city-light colour
+            bgfx::setTexture(2, s_emiss_, bgfx::isValid(earthEmiss_) ? earthEmiss_ : white_);  // city-light strength
             bgfx::setTransform(m.m);
             bgfx::setVertexBuffer(0, cm.vbh);
             bgfx::setIndexBuffer(cm.ibh);

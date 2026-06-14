@@ -76,7 +76,8 @@ private:
     float heatAmt_    = 0.0f;        // cached aerodynamic-heating intensity
     RVec3 earthCenterView_ { 0, 0, 0 };   // cached Earth centre, for rocket reflections
     bgfx::UniformHandle s_color_ = BGFX_INVALID_HANDLE, s_bump_ = BGFX_INVALID_HANDLE,
-                        s_night_ = BGFX_INVALID_HANDLE, s_rough_ = BGFX_INVALID_HANDLE;
+                        s_night_ = BGFX_INVALID_HANDLE, s_rough_ = BGFX_INVALID_HANDLE,
+                        s_emiss_ = BGFX_INVALID_HANDLE;
     bgfx::UniformHandle u_sunDir_ = BGFX_INVALID_HANDLE, u_earthCenter_ = BGFX_INVALID_HANDLE,
                         u_camPos_ = BGFX_INVALID_HANDLE, u_dispScale_ = BGFX_INVALID_HANDLE,
                         u_heat_ = BGFX_INVALID_HANDLE, u_earth_ = BGFX_INVALID_HANDLE;
@@ -101,7 +102,8 @@ private:
                         earthBump_  = BGFX_INVALID_HANDLE,
                         earthNight_ = BGFX_INVALID_HANDLE,
                         earthCloud_ = BGFX_INVALID_HANDLE,
-                        earthRough_ = BGFX_INVALID_HANDLE;
+                        earthRough_ = BGFX_INVALID_HANDLE,
+                        earthEmiss_ = BGFX_INVALID_HANDLE;
 
     // 3D view (view 0) state.
     float near_ = 0.01f, far_ = 1000.0f;
