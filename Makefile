@@ -82,9 +82,6 @@ $(SHADER_DIR)/vs_%.bin: $(SHADER_DIR)/vs_%.sc $(SHADER_DIR)/varying.def.sc
 $(SHADER_DIR)/fs_%.bin: $(SHADER_DIR)/fs_%.sc $(SHADER_DIR)/varying.def.sc
 	$(SHADERC) -f $< -o $@ --type fragment --platform linux -p 150 -i $(BGFX_SUB)/bgfx/src --varyingdef $(SHADER_DIR)/varying.def.sc
 
-# The texture DDS pack (~5 GB) lives in Git LFS beside the renderer; pull it on
-# demand only when the local copy is missing (e.g. skip-smudge clones), then
-# unzip the flat archive in place so the *.dds land in $(ASSET_DIR).
 $(TEX_ZIP):
 	git lfs pull --include "$(TEX_ZIP)"
 	$(UNZIP) $(TEX_ZIP) $(UNZIP_DEST) $(ASSET_DIR)
