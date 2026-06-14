@@ -1,6 +1,12 @@
-#define GLFW_EXPOSE_NATIVE_WIN32
-#define WIN32_LEAN_AND_MEAN
-#define NOMINMAX
+#if defined(_WIN32)
+#  define GLFW_EXPOSE_NATIVE_WIN32
+#  define WIN32_LEAN_AND_MEAN
+#  define NOMINMAX
+#elif defined(__APPLE__)
+#  define GLFW_EXPOSE_NATIVE_COCOA
+#elif defined(__linux__)
+#  define GLFW_EXPOSE_NATIVE_X11
+#endif
 
 #include "bgfx_backend.hpp"
 #include "../geometry.hpp"
@@ -14,13 +20,13 @@
 #include <GLFW/glfw3.h>
 #include <GLFW/glfw3native.h>
 
-// <windows.h> (via glfw3native.h) defines a DrawText macro that clashes with our
-// RenderBackend::DrawText method; drop it.
 #ifdef DrawText
 #undef DrawText
 #endif
 
-#include <timeapi.h>   // timeBeginPeriod (winmm)
+#if defined(_WIN32)
+#include <timeapi.h>
+#endif
 
 #include <cstdio>
 #include <cstring>
@@ -70,10 +76,9 @@ void BgfxBackend::Init(int width, int height, const char* title) {
     width_ = width; height_ = height;
     reset_ = BGFX_RESET_VSYNC | BGFX_RESET_MSAA_X4;
 
-    // Raise the Windows timer resolution to 1ms so the sim thread's
-    // sleep_for(10ms) pacing is accurate (raylib does this implicitly; without
-    // it sleeps round up to the ~15.6ms default tick and the sim runs slow).
+#if defined(_WIN32)
     timeBeginPeriod(1);
+#endif
 
     glfwInit();
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);   // bgfx owns the context
@@ -86,7 +91,14 @@ void BgfxBackend::Init(int width, int height, const char* title) {
     bgfx::renderFrame();   // signal single-threaded (submit on this thread)
     bgfx::Init init;
     init.type = bgfx::RendererType::OpenGL;
+#if defined(_WIN32)
     init.platformData.nwh = glfwGetWin32Window(window_);
+#elif defined(__APPLE__)
+    init.platformData.nwh = glfwGetCocoaWindow(window_);
+#elif defined(__linux__)
+    init.platformData.ndt = glfwGetX11Display();
+    init.platformData.nwh = (void*)(uintptr_t)glfwGetX11Window(window_);
+#endif
     init.resolution.width  = (uint32_t)width_;
     init.resolution.height = (uint32_t)height_;
     init.resolution.reset  = reset_;
@@ -183,7 +195,9 @@ void BgfxBackend::Shutdown() {
     bgfx::shutdown();
     if (window_) glfwDestroyWindow(window_);
     glfwTerminate();
+#if defined(_WIN32)
     timeEndPeriod(1);
+#endif
 }
 
 bool BgfxBackend::ShouldClose() const { return glfwWindowShouldClose(window_); }
