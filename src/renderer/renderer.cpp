@@ -223,7 +223,7 @@ void Renderer::DrawPredictedTrajectory() const {
         path.push_back({ cur,  kYellow });
         prev = cur;
 
-        if (r.norm() <= EARTH_RADIUS_M) break;      // reached the surface
+        if (r.norm() <= EARTH_RADIUS) break;      // reached the surface
     }
     backend_.DrawLines(path.data(), path.size(), 2.0f);
 }
@@ -231,7 +231,7 @@ void Renderer::DrawPredictedTrajectory() const {
 void Renderer::DrawECIAxes() const {
     // ECI axes through the Earth's centre: X vernal equinox (red),
     // Y 90E equatorial (green), Z north pole (blue).
-    const double L = EARTH_RADIUS_M * 1.5;
+    const double L = EARTH_RADIUS * 1.5;
     LineVertex ax[6] = {
         { ToView({-L, 0, 0}), kRed },   { ToView({L, 0, 0}), kRed },
         { ToView({0, -L, 0}), kGreen }, { ToView({0, L, 0}), kGreen },

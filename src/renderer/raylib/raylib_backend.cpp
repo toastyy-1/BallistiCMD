@@ -196,7 +196,7 @@ void RaylibBackend::ensureEarth() {
     // (metres -> km) applies to it like everything else. The 12 deg east offset
     // matches the texture alignment.
     const float kLonOffset = 12.0f / 360.0f;
-    earthMesh_ = CreateMesh(geom::buildSphere((float)EARTH_RADIUS_M, 128, 128, kLonOffset));
+    earthMesh_ = CreateMesh(geom::buildSphere((float)EARTH_RADIUS, 128, 128, kLonOffset));
     earthTex_  = LoadTexture("src/renderer/raylib/world.jpg");
 }
 

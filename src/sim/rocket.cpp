@@ -69,13 +69,24 @@ static Vec3 gravity_accel(const Vec3& r) {
     double pm       = -GM_EARTH / (r2 * r_norm);
 
     double zr2      = (r.z * r.z) / r2;
-    double k        = 1.5 * J2 * (EARTH_RADIUS_M * EARTH_RADIUS_M) / r2;
+    double k        = 1.5 * J2 * (EARTH_RADIUS * EARTH_RADIUS) / r2;
 
     return {
         .x = pm * r.x * (1.0 - k * (5.0 * zr2 - 1.0)),
         .y = pm * r.y * (1.0 - k * (5.0 * zr2 - 1.0)),
         .z = pm * r.z * (1.0 - k * (5.0 * zr2 - 3.0)),
     };
+}
+
+// acceleration due to drag in the ECI frame
+static Vec3 drag_accel(const Vec3& r) {
+    double altitude = r.norm() - EARTH_RADIUS;
+
+    double air_density = 1.225 * std::exp(-altitude / 8500.0);
+
+    Vec3 rocket_unit_vec = r / r.norm();
+    
+
 }
 
 void Rocket::update_dynamics() {
@@ -149,12 +160,12 @@ void Rocket::update_dynamics() {
     r += delta_r;
     v += delta_v;
     a = delta_v / dt; // for INS
-    altitude = r_norm - EARTH_RADIUS_M;
+    altitude = r_norm - EARTH_RADIUS;
 
     // keep rocket from falling through the earth
-    if (r.norm() < EARTH_RADIUS_M) {
+    if (r.norm() < EARTH_RADIUS) {
         Vec3 r_hat = r.normalized();
-        r = r_hat * EARTH_RADIUS_M;
+        r = r_hat * EARTH_RADIUS;
         v = r_hat * std::max(v.dot(r_hat), 0.0);
 
     }
@@ -294,9 +305,9 @@ static Vec3 lat_lon_to_eci(double latitude_deg, double longitude_deg) {
     double lat = latitude_deg * M_PI / 180.0;
     double lon = longitude_deg * M_PI / 180.0;
     return {
-        .x = EARTH_RADIUS_M * cos(lat) * cos(lon),
-        .y = EARTH_RADIUS_M * cos(lat) * sin(lon),
-        .z = EARTH_RADIUS_M * sin(lat)
+        .x = EARTH_RADIUS * cos(lat) * cos(lon),
+        .y = EARTH_RADIUS * cos(lat) * sin(lon),
+        .z = EARTH_RADIUS * sin(lat)
     };
 }
 
