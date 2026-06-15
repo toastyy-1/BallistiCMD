@@ -13,6 +13,8 @@ constexpr double RAD_TO_DEG = 57.295779513082320876;
 // Physical
 constexpr double G    = 6.67430e-11;
 constexpr double g0   = 9.80665;
+constexpr double R_d  = 287.05287;
+constexpr double p_b  = 1.2250;
 
 // WGS84
 constexpr double EARTH_RADIUS         = 6378137.0;

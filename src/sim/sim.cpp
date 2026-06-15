@@ -18,8 +18,8 @@ namespace sim {
     void Sim::configure_rocket() {
         double origin_latitude  =  35.948416;
         double origin_longitude = -83.936084;
-        double target_latitude  =  38.9072;
-        double target_longitude = -77.0369;
+        double target_latitude  =  55.753331;
+        double target_longitude =  37.616062;
 
         rocket.set_start(origin_latitude, origin_longitude, target_latitude, target_longitude);
 
