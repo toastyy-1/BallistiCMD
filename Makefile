@@ -17,6 +17,7 @@ BGFX_SUB    := third_party/bgfx.cmake
 SHADER_DIR  := src/renderer/bgfx/shaders
 ASSET_DIR   := src/renderer/bgfx
 TEX_ZIP     := $(ASSET_DIR)/bgfx.textures.zip
+BGFX_TEXTURES_READY := $(ASSET_DIR)/.bgfx_textures_ready
 BGFX_DEFS   := -DUSE_BGFX -D_USE_MATH_DEFINES -DBX_CONFIG_DEBUG=0
 BGFX_INCS   := -I$(BGFX_SUB)/bgfx/include -I$(BGFX_SUB)/bx/include -I$(BGFX_SUB)/bimg/include
 BGFX_LIBS   := $(BGFX_DIR)/cmake/bgfx/libbgfx.a \
@@ -82,15 +83,16 @@ $(SHADER_DIR)/vs_%.bin: $(SHADER_DIR)/vs_%.sc $(SHADER_DIR)/varying.def.sc
 $(SHADER_DIR)/fs_%.bin: $(SHADER_DIR)/fs_%.sc $(SHADER_DIR)/varying.def.sc
 	$(SHADERC) -f $< -o $@ --type fragment --platform linux -p 150 -i $(BGFX_SUB)/bgfx/src --varyingdef $(SHADER_DIR)/varying.def.sc
 
-$(TEX_ZIP):
+$(BGFX_TEXTURES_READY): $(TEX_ZIP)
 	git lfs pull --include "$(TEX_ZIP)"
 	$(UNZIP) $(TEX_ZIP) $(UNZIP_DEST) $(ASSET_DIR)
+	touch $@
 
-bgfx-deps: $(TEX_ZIP)
+bgfx-deps: $(BGFX_TEXTURES_READY)
 	git submodule update --init --recursive
 	cmake -S $(BGFX_SUB) -B $(BGFX_DIR) -G "$(CMAKE_GEN)" \
 	    -DCMAKE_BUILD_TYPE=Release -DBGFX_BUILD_EXAMPLES=OFF -DBGFX_BUILD_TOOLS=ON
-	cmake --build $(BGFX_DIR) -j
+	cmake --build $(BGFX_DIR) -j 12
 
 clean:
 	$(RM) $(TARGET) $(BGFX_TARGET)

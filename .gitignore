@@ -5,3 +5,5 @@
 *.csv
 *.dds
 *.bin
+.bgfx_textures_ready
+build/

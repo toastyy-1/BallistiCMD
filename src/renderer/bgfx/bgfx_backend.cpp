@@ -80,9 +80,17 @@ void BgfxBackend::Init(int width, int height, const char* title) {
     timeBeginPeriod(1);
 #endif
 
-    glfwInit();
+    if (!glfwInit()) {
+        std::fprintf(stderr, "bgfx: failed to initialize GLFW\n");
+        std::abort();
+    }
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);   // bgfx owns the context
     window_ = glfwCreateWindow(width_, height_, title, nullptr, nullptr);
+    if (!window_) {
+        std::fprintf(stderr, "bgfx: failed to create GLFW window\n");
+        glfwTerminate();
+        std::abort();
+    }
     glfwSetWindowUserPointer(window_, this);
     glfwSetScrollCallback(window_, [](GLFWwindow* w, double, double yoff) {
         ((BgfxBackend*)glfwGetWindowUserPointer(w))->wheel_ += (float)yoff;
