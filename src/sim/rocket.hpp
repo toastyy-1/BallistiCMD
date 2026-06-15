@@ -120,6 +120,7 @@ class Rocket {
     // helper functions
     double calculate_engine_thrust_component();
     double calculate_engine_rotational_component();
+    Vec3 calc_drag_accel();
     Vec3 nose_direction_eci();
 
 };

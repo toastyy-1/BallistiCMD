@@ -1,6 +1,7 @@
 #include "rocket.hpp"
 #include "constants.hpp"
 #include <cmath>
+#include <iostream>
 
 Rocket::Rocket() {
     // default constructor
@@ -63,19 +64,85 @@ Vec3 Rocket::nose_direction_eci() {
 }
 
 // gravitational acceleration in the ECI frame
-static Vec3 gravity_accel(const Vec3& r) {
+static Vec3 calc_gravity_accel(const Vec3& r) {
     double r2       = r.dot(r);
     double r_norm   = std::sqrt(r2);
     double pm       = -GM_EARTH / (r2 * r_norm);
 
     double zr2      = (r.z * r.z) / r2;
-    double k        = 1.5 * J2 * (EARTH_RADIUS_M * EARTH_RADIUS_M) / r2;
+    double k        = 1.5 * J2 * (EARTH_RADIUS * EARTH_RADIUS) / r2;
 
     return {
         .x = pm * r.x * (1.0 - k * (5.0 * zr2 - 1.0)),
         .y = pm * r.y * (1.0 - k * (5.0 * zr2 - 1.0)),
         .z = pm * r.z * (1.0 - k * (5.0 * zr2 - 3.0)),
     };
+}
+
+// acceleration due to drag in the ECI frame
+Vec3 Rocket::calc_drag_accel() {
+    double altitude = r.norm() - EARTH_RADIUS; // altitude in meters
+    double air_density;
+
+    // power relationship density equation
+    auto pow_dens = [&altitude](double rho_b, double T_b, double L, double layer_base_alt) {
+        return rho_b * pow(( (T_b + L * (altitude - layer_base_alt)) / T_b ), (-1.0 * g0 / (R_d * L)) - 1);
+    };
+
+    // exponential relationship density equation
+    auto exp_dens = [&altitude](double rho_b, double T_b, double layer_base_alt) {
+        return rho_b * exp(-1.0 * (g0 * (altitude - layer_base_alt)) / (R_d * T_b));
+    };
+
+    // troposphere
+    if (altitude < 11000) {
+        air_density = pow_dens(1.2250, 288.15, -0.0065, 0);
+    }
+    // lower stratosphere
+    else if (altitude < 20000) {
+        air_density = exp_dens(0.36391, 216.65, 11000);
+    }
+    // middle stratosphere
+    else if (altitude < 32000) {
+        air_density = pow_dens(0.088035, 216.65, 0.001, 20000);
+    }
+    // upper stratosphere
+    else if (altitude < 47000) {
+        air_density = pow_dens(0.013225, 228.65, 0.0028, 32000);
+    }
+    // lower mesosphere
+    else if (altitude < 51000) {
+        air_density = exp_dens(0.0014275, 270.65, 47000);
+    }
+    // middle mesosphere
+    else if (altitude < 71000) {
+        air_density = pow_dens(0.00086160, 270.65, -0.0028, 51000);
+    }
+    // upper mesosphere
+    else if (altitude < 86000) {
+        air_density = pow_dens(0.000064211, 214.65, -0.0020, 71000);
+    }
+    // thermosphere
+    else {
+        air_density = exp_dens(0.000006958, 186.87, 86000);
+    }
+
+    // wind of earth spinning
+    Vec3 w_earth = {0, 0, EARTH_ROTATION_RATE};
+    Vec3 v_air = w_earth.cross(r);
+    Vec3 v_relative = v - v_air;
+
+    double craft_speed = v_relative.norm();
+
+    // calcualte the aoa entering into the atmosphere
+    Vec3 nose_direction = nose_direction_eci();
+    double AoA = std::acos(std::max(-1.0, std::min(1.0, v_relative.dot(nose_direction) / craft_speed)));
+    //std::cout << AoA * RAD_TO_DEG << std::endl;
+
+    // apply drag (shid rn add a real drag model idoit) ((idfk how im going to do that simply))
+    double area = M_PI * props.radius * props.radius;
+    double drag_mag = 0.5 * air_density * craft_speed * craft_speed * props.Cd * area;
+    return v_relative * (-drag_mag / (m_current * craft_speed));
 }
 
 void Rocket::update_dynamics() {
@@ -91,6 +158,9 @@ void Rocket::update_dynamics() {
     // thrust acceleration
     Vec3 a_thrust = nose_direction_eci() * (calculate_engine_thrust_component() / m);
 
+    // drag acceleration
+    Vec3 a_drag = calc_drag_accel();
+
     ///////////////////////////////////////////////////////////////////////////////////////////////
     // RK4 integration                                                                           //
     ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -100,10 +170,10 @@ void Rocket::update_dynamics() {
     ////////////////////////////////////
     // gravitional acceleration
     Vec3 k1_r = v;
-    Vec3 k1_rv = gravity_accel(r);
+    Vec3 k1_rv = calc_gravity_accel(r);
 
-    // add engine thrust
-    k1_rv += a_thrust;
+    // add engine thrust and drag
+    k1_rv += a_thrust + a_drag;
 
     ////////////////////////////////////
     // k2 terms                       //
@@ -111,10 +181,10 @@ void Rocket::update_dynamics() {
     // gravitional acceleration
     Vec3 k2_r = v + k1_rv * (dt / 2);
     Vec3 r2 = r + k1_r * (dt / 2);
-    Vec3 k2_rv = gravity_accel(r2);
+    Vec3 k2_rv = calc_gravity_accel(r2);
 
-    // add engine thrust
-    k2_rv += a_thrust;
+    // add engine thrust and drag
+    k2_rv += a_thrust + a_drag;
 
     ////////////////////////////////////
     // k3 terms                       //
@@ -122,10 +192,10 @@ void Rocket::update_dynamics() {
     // gravitional acceleration
     Vec3 k3_r = v + k2_rv * (dt / 2);
     Vec3 r3 = r + k2_r * (dt / 2);
-    Vec3 k3_rv = gravity_accel(r3);
+    Vec3 k3_rv = calc_gravity_accel(r3);
 
-    // add engine thrust
-    k3_rv += a_thrust;
+    // add engine thrust and drag
+    k3_rv += a_thrust + a_drag;
 
     ////////////////////////////////////
     // k4 terms                       //
@@ -133,10 +203,10 @@ void Rocket::update_dynamics() {
     // gravitional acceleration
     Vec3 k4_r = v + k3_rv * dt;
     Vec3 r4 = r + k3_r * dt;
-    Vec3 k4_rv = gravity_accel(r4);
+    Vec3 k4_rv = calc_gravity_accel(r4);
 
-    // add engine thrust
-    k4_rv += a_thrust;
+    // add engine thrust and drag
+    k4_rv += a_thrust + a_drag;
 
     ////////////////////////////////////
     // Rk4 formula
@@ -149,12 +219,12 @@ void Rocket::update_dynamics() {
     r += delta_r;
     v += delta_v;
     a = delta_v / dt; // for INS
-    altitude = r_norm - EARTH_RADIUS_M;
+    altitude = r_norm - EARTH_RADIUS;
 
     // keep rocket from falling through the earth
-    if (r.norm() < EARTH_RADIUS_M) {
+    if (r.norm() < EARTH_RADIUS) {
         Vec3 r_hat = r.normalized();
-        r = r_hat * EARTH_RADIUS_M;
+        r = r_hat * EARTH_RADIUS;
         v = r_hat * std::max(v.dot(r_hat), 0.0);
 
     }
@@ -294,9 +364,9 @@ static Vec3 lat_lon_to_eci(double latitude_deg, double longitude_deg) {
     double lat = latitude_deg * M_PI / 180.0;
     double lon = longitude_deg * M_PI / 180.0;
     return {
-        .x = EARTH_RADIUS_M * cos(lat) * cos(lon),
-        .y = EARTH_RADIUS_M * cos(lat) * sin(lon),
-        .z = EARTH_RADIUS_M * sin(lat)
+        .x = EARTH_RADIUS * cos(lat) * cos(lon),
+        .y = EARTH_RADIUS * cos(lat) * sin(lon),
+        .z = EARTH_RADIUS * sin(lat)
     };
 }
 

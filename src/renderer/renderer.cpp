@@ -248,7 +248,7 @@ void Renderer::DrawPredictedTrajectory() const {
         path.push_back({ cur,  kYellow });
         prev = cur;
 
-        if (r.norm() <= EARTH_RADIUS_M) break;      // reached the surface
+        if (r.norm() <= EARTH_RADIUS) break;      // reached the surface
     }
     backend_.DrawLines(path.data(), path.size(), 2.0f);
 }

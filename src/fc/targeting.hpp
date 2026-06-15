@@ -28,23 +28,23 @@ Initial_States create_target_trajectory(double lat_target, double long_target, s
 
     // get ECI coordinates from lat and long
     out.r_origin = {
-        EARTH_RADIUS_M * cos(lat_origin) * cos(long_origin),
-        EARTH_RADIUS_M * cos(lat_origin) * sin(long_origin),
-        EARTH_RADIUS_M * sin(lat_origin)
+        EARTH_RADIUS * cos(lat_origin) * cos(long_origin),
+        EARTH_RADIUS * cos(lat_origin) * sin(long_origin),
+        EARTH_RADIUS * sin(lat_origin)
     };
     out.r_target = {
-        EARTH_RADIUS_M * cos(lat_target) * cos(long_target),
-        EARTH_RADIUS_M * cos(lat_target) * sin(long_target),
-        EARTH_RADIUS_M * sin(lat_target)
+        EARTH_RADIUS * cos(lat_target) * cos(long_target),
+        EARTH_RADIUS * cos(lat_target) * sin(long_target),
+        EARTH_RADIUS * sin(lat_target)
     };
 
     // determine trajectory parameters
     // https://cmp.felk.cvut.cz/~kukelova/pajdla/Bate,%20Mueller,%20and%20White%20-%20Fundamentals%20of%20Astrodynamics.pdf
     // page 277
-    double range_angle = acos(out.r_origin.dot(out.r_target) / (EARTH_RADIUS_M * EARTH_RADIUS_M));
+    double range_angle = acos(out.r_origin.dot(out.r_target) / (EARTH_RADIUS * EARTH_RADIUS));
 
     double h_burnout = 80e3;
-    double r_burnout = EARTH_RADIUS_M + h_burnout;
+    double r_burnout = EARTH_RADIUS + h_burnout;
 
     double sin_half = sin(range_angle / 2.0);
     double v_burnout = sqrt(2.0 * GM_EARTH * sin_half / (r_burnout * (1.0 + sin_half)));
@@ -65,9 +65,9 @@ Initial_States create_target_trajectory(double lat_target, double long_target, s
     double v_s1_bo = s1.exhaust_velocity() * log(m0 / (m0 - s1.m_fuel)) - g0 * t_burn;
     double h_s1_bo = 0.5 * v_s1_bo * t_burn;
 
-    Vec3 up = out.r_origin / EARTH_RADIUS_M;
+    Vec3 up = out.r_origin / EARTH_RADIUS;
     Vec3 downrange = (out.r_target - up * out.r_target.dot(up)).normalized();
-    out.r_s1_bo_T = up * (EARTH_RADIUS_M + h_s1_bo);
+    out.r_s1_bo_T = up * (EARTH_RADIUS + h_s1_bo);
     out.v_s1_bo_T = (downrange * cos(fpa) + up * sin(fpa)) * v_s1_bo;
 
     // return all our calculated stuff yay!
