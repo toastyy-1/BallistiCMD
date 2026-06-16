@@ -203,7 +203,7 @@ void Renderer::DrawRocket() const {
     f.flick   = 0.82f + 0.12f*sinf(t*46.0f) + 0.06f*sinf(t*71.0f + 1.7f);
     // Atmospheric density factor (~8km scale height): drives Mach diamonds, which
     // only form in atmosphere (over/under-expanded nozzle), not in vacuum.
-    double altitude = st.r.norm() - EARTH_RADIUS_M;
+    double altitude = st.r.norm() - EARTH_RADIUS;
     f.air     = (float)exp(-fmax(altitude, 0.0) / 8000.0);
     // Aerodynamic heating ~ dynamic pressure (air * v^2): glows on ascent through
     // the dense atmosphere at speed and (much more) on reentry.
@@ -256,7 +256,7 @@ void Renderer::DrawPredictedTrajectory() const {
 void Renderer::DrawECIAxes() const {
     // ECI axes through the Earth's centre: X vernal equinox (red),
     // Y 90E equatorial (green), Z north pole (blue).
-    const double L = EARTH_RADIUS_M * 1.5;
+    const double L = EARTH_RADIUS * 1.5;
     LineVertex ax[6] = {
         { ToView({-L, 0, 0}), kRed },   { ToView({L, 0, 0}), kRed },
         { ToView({0, -L, 0}), kGreen }, { ToView({0, L, 0}), kGreen },

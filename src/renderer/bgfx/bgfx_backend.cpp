@@ -6,6 +6,7 @@
 #  define GLFW_EXPOSE_NATIVE_COCOA
 #elif defined(__linux__)
 #  define GLFW_EXPOSE_NATIVE_X11
+#  define GLFW_EXPOSE_NATIVE_WAYLAND
 #endif
 
 #include "bgfx_backend.hpp"
@@ -104,13 +105,24 @@ void BgfxBackend::Init(int width, int height, const char* title) {
 #elif defined(__APPLE__)
     init.platformData.nwh = glfwGetCocoaWindow(window_);
 #elif defined(__linux__)
-    init.platformData.ndt = glfwGetX11Display();
-    init.platformData.nwh = (void*)(uintptr_t)glfwGetX11Window(window_);
+    if (glfwGetPlatform() == GLFW_PLATFORM_WAYLAND) {
+        init.platformData.ndt  = glfwGetWaylandDisplay();
+        init.platformData.nwh  = glfwGetWaylandWindow(window_);
+        init.platformData.type = bgfx::NativeWindowHandleType::Wayland;
+    } else {
+        init.platformData.ndt = glfwGetX11Display();
+        init.platformData.nwh = (void*)(uintptr_t)glfwGetX11Window(window_);
+    }
 #endif
     init.resolution.width  = (uint32_t)width_;
     init.resolution.height = (uint32_t)height_;
     init.resolution.reset  = reset_;
-    bgfx::init(init);
+    if (!bgfx::init(init)) {
+        std::fprintf(stderr, "bgfx: init failed\n");
+        glfwDestroyWindow(window_);
+        glfwTerminate();
+        std::abort();
+    }
 
     // Preserve submit order (the additive plume must draw after the opaque hull).
     bgfx::setViewMode(0, bgfx::ViewMode::Sequential);
