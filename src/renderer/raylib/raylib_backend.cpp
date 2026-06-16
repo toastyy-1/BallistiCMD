@@ -94,10 +94,16 @@ bool RaylibBackend::ShouldClose() const { return WindowShouldClose(); }
 
 FrameInput RaylibBackend::PollInput() {
     Vector2 d = GetMouseDelta();
+    float mx = (IsKeyDown(KEY_D) ? 1.0f : 0.0f) - (IsKeyDown(KEY_A) ? 1.0f : 0.0f);
+    float my = (IsKeyDown(KEY_E) ? 1.0f : 0.0f) - (IsKeyDown(KEY_Q) ? 1.0f : 0.0f);
+    float mz = (IsKeyDown(KEY_W) ? 1.0f : 0.0f) - (IsKeyDown(KEY_S) ? 1.0f : 0.0f);
+    bool boost = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
+    bool recenter = IsKeyDown(KEY_F);
     return FrameInput {
         d.x, d.y,
         GetMouseWheelMove(),
         IsMouseButtonDown(MOUSE_BUTTON_LEFT),
+        mx, my, mz, boost, recenter,
     };
 }
 
@@ -195,8 +201,8 @@ void RaylibBackend::ensureEarth() {
     // Sphere in metres (radius EARTH_RADIUS_M) so the renderer's view basis
     // (metres -> km) applies to it like everything else. The 12 deg east offset
     // matches the texture alignment.
-    const float kLonOffset = 12.0f / 360.0f;
-    earthMesh_ = CreateMesh(geom::buildSphere((float)EARTH_RADIUS, 128, 128, kLonOffset));
+    const float kLonOffset = 0.5f;   // half-turn: align Greenwich-centred map with ECI (see bgfx backend)
+    earthMesh_ = CreateMesh(geom::buildSphere((float)EARTH_RADIUS_M, 128, 128, kLonOffset));
     earthTex_  = LoadTexture("src/renderer/raylib/world.jpg");
 }
 

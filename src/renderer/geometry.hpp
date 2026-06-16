@@ -19,6 +19,12 @@ void appendFrustum(Mesh& m, float z0, float z1, float r0, float r1,
 void appendTriangle(Mesh& m, const RVec3& a, const RVec3& b, const RVec3& c,
                     RColor col, bool doubleSided = false);
 
+// Surface of revolution around +Z. `profile` is an ordered list of points with
+// x = axial z (increasing) and y = radius; revolved into `sides` segments with
+// smooth normals from the profile slope. Used for the rounded nose cone.
+void appendRevolve(Mesh& m, const std::vector<RVec3>& profile,
+                   int sides, RColor col, bool capBase = true);
+
 // Unit cone: base circle radius 1 in the z=0 plane, apex at z=1. Recoloured per
 // draw via Material; used (scaled/oriented) for the exhaust plume.
 Mesh buildCone(int sides);
@@ -28,5 +34,11 @@ Mesh buildCone(int sides);
 // north pole), so an equirectangular Earth texture maps directly. lonOffset
 // shifts the texture east as a fraction of a full turn.
 Mesh buildSphere(float radius, int rings, int sectors, float lonOffset = 0.0f);
+
+// Flat (n+1)x(n+1) grid spanning [-1,1]^2 in the XY plane (z = 0). Used as the
+// camera-following terrain LOD patch: vs_patch reads pos.xy as grid coordinates,
+// projects them onto the sphere under the camera, and displaces at high
+// resolution. Normals/UVs/colour are unused by that shader.
+Mesh buildGrid(int n);
 
 }

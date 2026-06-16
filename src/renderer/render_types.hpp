@@ -19,6 +19,12 @@ struct FrameInput {
     float mouse_dx, mouse_dy;  // mouse movement since last frame, pixels
     float wheel;               // scroll wheel delta
     bool  left_down;           // left mouse button held
+    // Free-fly translation axes (defaulted so existing aggregate inits stay valid).
+    float move_x   = 0.0f;     // strafe:  +right (D) / -left (A)
+    float move_y   = 0.0f;     // vertical:+up    (E) / -down (Q)
+    float move_z   = 0.0f;     // forward: +fwd   (W) / -back (S)
+    bool  boost    = false;    // hold to move faster (Left Shift)
+    bool  recenter = false;    // snap the view pivot back to the rocket (F)
 };
 
 enum class BlendMode { Alpha, Additive };
