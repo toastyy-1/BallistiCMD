@@ -402,7 +402,7 @@ void BgfxBackend::ensureEarth() {
     const float kLonOffset = 0.5f;
     // High tessellation so vertex displacement has the resolution to show real
     // relief. 2048 rings/sectors -> ~4.2M verts / ~25M tris, 32-bit indices.
-    earthMesh_  = CreateMesh(geom::buildSphere((float)EARTH_RADIUS_M, 2048, 2048, kLonOffset));
+    earthMesh_  = CreateMesh(geom::buildSphere((float)EARTH_RADIUS, 2048, 2048, kLonOffset));
     auto loadDDS = [&](const char* path) -> bgfx::TextureHandle {
         std::vector<uint8_t> data = readFile(path);
         if (data.empty()) { std::fprintf(stderr, "bgfx: missing %s\n", path); return BGFX_INVALID_HANDLE; }
@@ -424,7 +424,7 @@ void BgfxBackend::ensureEarth() {
 
     // Sphere for the cloud shells. Denser than a plain textured sphere would need
     // so the per-vertex noise displacement resolves smoothly. 32-bit indices.
-    cloudMesh_  = CreateMesh(geom::buildSphere((float)EARTH_RADIUS_M, 512, 512, kLonOffset));
+    cloudMesh_  = CreateMesh(geom::buildSphere((float)EARTH_RADIUS, 512, 512, kLonOffset));
 
     // Camera-following terrain LOD patch: a dense flat grid the vertex shader
     // wraps onto the sphere under the camera and displaces at full map resolution.
@@ -605,7 +605,7 @@ void BgfxBackend::DrawEarth(const EarthFrame& f) {
         const float dispAmp    = 3000.0f; // noise amplitude (m); ~> gap so shells merge
         const float dispFreq   = 10.0f;    // noise feature scale over the sphere
         for (int i = 0; i < kShells; ++i) {
-            float factor = 1.0f + ((baseKm + i * gapKm) * 1000.0f) / (float)EARTH_RADIUS_M;
+            float factor = 1.0f + ((baseKm + i * gapKm) * 1000.0f) / (float)EARTH_RADIUS;
             RMat4 m = rmath::mul(f.model, rmath::scale(factor));
             setVec4(u_sunDir_, f.sun_dir);
             setVec4(u_earthCenter_, f.center);
