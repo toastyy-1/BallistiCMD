@@ -1,4 +1,4 @@
-Missile Targeting Program and Epic 6DoF
+Sub Orbital Rocket Targeting Program and Epic 6DoF
 
 Copyright (c) 2026 [Tyler Wiggins]. All rights reserved.
 

@@ -57,7 +57,7 @@ const char* fmt(const char* f, ...) {
 
 Renderer::Renderer(RenderBackend& backend, const sim::Sim& s)
     : backend_(backend), sim_(s) {
-    backend_.Init(1920, 1080, "Missile Program");
+    backend_.Init(1920, 1080, "Trajectory Sim");
     markerSphere_ = backend_.CreateMesh(geom::buildSphere(1.0f, 16, 24));
 }
 
