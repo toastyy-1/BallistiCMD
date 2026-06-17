@@ -41,8 +41,8 @@ else
         LDLIBS       := -lraylib -framework OpenGL -framework Cocoa -framework IOKit -framework CoreVideo
         BGFX_SYSLIBS := -lglfw -framework OpenGL -framework Cocoa -framework IOKit -framework CoreVideo -framework Metal -framework QuartzCore
     else
-        LDLIBS       := -lraylib -lGL -lm -lpthread -ldl -lrt -lX11
-        BGFX_SYSLIBS := -lglfw -lGL -lm -lpthread -ldl -lrt -lX11
+        LDLIBS       := -lraylib -lGL -lm -lpthread -ldl -lrt -lX11 -latomic
+        BGFX_SYSLIBS := -lglfw -lGL -lm -lpthread -ldl -lrt -lX11 -latomic
     endif
     SHADERC   := $(BGFX_DIR)/cmake/bgfx/shaderc
     CMAKE_GEN := Unix Makefiles
