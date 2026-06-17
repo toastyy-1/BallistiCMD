@@ -30,6 +30,7 @@
 #endif
 
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <cstdint>
 #include <fstream>
@@ -105,7 +106,8 @@ void BgfxBackend::Init(int width, int height, const char* title) {
 #elif defined(__APPLE__)
     init.platformData.nwh = glfwGetCocoaWindow(window_);
 #elif defined(__linux__)
-    if (glfwGetPlatform() == GLFW_PLATFORM_WAYLAND) {
+    const char* waylandDisplay = std::getenv("WAYLAND_DISPLAY");
+    if (waylandDisplay != nullptr) {
         init.platformData.ndt  = glfwGetWaylandDisplay();
         init.platformData.nwh  = glfwGetWaylandWindow(window_);
         init.platformData.type = bgfx::NativeWindowHandleType::Wayland;
