@@ -3,7 +3,8 @@
 #include <random>
 #include "types.hpp"
 #include "constants.hpp"
-#include "sim/sim.hpp"
+
+class Rocket;
 
 // simulated INS
 class INS {
@@ -11,14 +12,8 @@ class INS {
     INS() : rng(94058) {}
 
     // reads sim states and adds noise
-    Vec3 read_INS_acc(const sim::State& st) {
-        Vec3 specific_force_eci = st.a - gravity_eci(st.r);
-        return add_noise(specific_force_eci, acc_stddev);
-    }
-
-    Vec3 read_INS_gyr(const sim::State& st) {
-        return add_noise(st.w, gyr_stddev);
-    }
+    Vec3 read_INS_acc(const Rocket& r);
+    Vec3 read_INS_gyr(const Rocket& r);
 
     private:
     std::mt19937 rng;

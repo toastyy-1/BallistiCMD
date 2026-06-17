@@ -171,7 +171,7 @@ void Renderer::DrawEarth(const RCamera& cam, RVec3 earthC) {
 }
 
 void Renderer::DrawRocket() const {
-    sim::State st = sim_.get_state();
+    RocketState st = sim_.get_state();
     Quat   qr       = st.q_rocket;
     Quat   qe       = st.q_engine;
     double cm_dist  = st.cm_dist;
@@ -225,7 +225,7 @@ void Renderer::DrawPredictedTrajectory() const {
         return p * (-GM_EARTH / (rn * rn * rn));
     };
 
-    sim::State st = sim_.get_state();
+    RocketState st = sim_.get_state();
     Vec3 r = st.r;
     Vec3 v = st.v;
 
@@ -286,7 +286,7 @@ void Renderer::DrawSurfaceMarkers() const {
     // sphere — so it reads as a point planted on the ground and is occluded by
     // the globe when it rotates to the far side. Sized with zoom so the pins
     // stay a roughly constant apparent size across the zoom range.
-    InitialStates init = sim_.get_state().init;
+    RocketStartState init = sim_.get_state().init;
 
     const float sphereR = dist * 0.02f;          // marker radius (km, view units)
     const float pinLen  = dist * 0.06f;          // stalk height above the surface
@@ -312,7 +312,7 @@ void Renderer::DrawSurfaceMarkers() const {
 
 void Renderer::DrawTelemetry() const {
     // --- gather raw state (all ECI, SI units) from sim ---
-    sim::State st = sim_.get_state();
+    RocketState st = sim_.get_state();
     Vec3 r = st.r;
     Vec3 v = st.v;
     Vec3 a = st.a;

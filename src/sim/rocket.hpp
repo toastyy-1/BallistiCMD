@@ -1,6 +1,7 @@
 #pragma once
 #include "types.hpp"
 #include "constants.hpp"
+#include "fc/fc.hpp"
 #include <array>
 
 struct Stage {
@@ -19,13 +20,27 @@ struct Stage {
     double mass_flow_rate() const { return isp > 0 ? thrust / exhaust_velocity() : 0.0; }
 };
 
-struct InitialStates {
+struct RocketStartState {
     Vec3 origin_r_eci;
     Quat origin_q_eci; // origin attitude
     Vec3 target_r_eci;
 };
 
+// snapshot of rocket state at any given moment
+struct RocketState {
+    double t = 0;
+    Vec3 r{}, v{}, a{}, w{};
+    Quat q_rocket{1, 0, 0, 0};
+    Quat q_engine{1, 0, 0, 0};
+    double mass = 0, fuel = 0;
+    double length = 0, cm_dist = 0, engine_dist = 0, radius = 0;   // dims from nose
+    RocketStartState init{};
+};
+
 class Rocket {
+    friend class INS;
+    friend class FlightController;
+
     ///////////////////////////////////////////////////////////////////////////////////////////////
     // public                                                                                    //
     ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -37,21 +52,8 @@ class Rocket {
     Rocket();
     ~Rocket();
 
-    // read-only accessors (let other threads peek at the current state)
-    Vec3 get_pos() const { return r; }
-    Vec3 get_vel() const { return v; }
-    Vec3 get_acc() const { return a; }
-    Vec3 get_ang_vel() const { return w; }
-    Quat get_orientation() const { return q_rocket; }
-    Quat get_engine_orientation() const { return q_engine; }
-    double get_mass() const { return m_current; }
-    double get_fuel_mass() const { return m_fuel_current; }
-    double get_active_fuel() const { return active().m_fuel; }
-    const Stage& get_stage(int stage_num) const { return props.stages[stage_num - 1]; }
-    bool active_is_powered() const { return active().max_thrust > 0.0; }
-    InitialStates get_rocket_initial_states() const { return init_state; }
-    double get_radius() const { return props.radius; }
-    double get_length() const;
+    // getters:
+    RocketState get_state() const;
 
     // setters (should only be used on setup)
     void set_pos(const Vec3& pos) { r = pos; } // set absolute position
@@ -65,16 +67,26 @@ class Rocket {
     void update_dynamics();
     void update_rotation();
     void update_mass();
+    void update_flight_controller(double current_time) {
+        if (!fc_initialized) { fc.init(*this, current_time); fc_initialized = true; }
+        fc.flight_controller_process(*this, current_time);
+    }
 
     // used by flight controller
     void light_engine(); // should be used once per stage
     bool advance_stage();
     void set_engine_orientation(Quat orientation);
 
+
     ///////////////////////////////////////////////////////////////////////////////////////////////
     // private                                                                                    //
     ///////////////////////////////////////////////////////////////////////////////////////////////
     private:
+    ///////////////////////////////////////////////////////////////////////////////////////////////
+    // rocket static configuration                                                               //
+    ///////////////////////////////////////////////////////////////////////////////////////////////
+    FlightController fc;
+    bool fc_initialized = false;
 
     ///////////////////////////////////////////////////////////////////////////////////////////////
     // rocket static configuration                                                               //
@@ -91,7 +103,7 @@ class Rocket {
     Properties props;
 
     // initial launch geometry (origin, target, launch attitude, such things)
-    InitialStates init_state;
+    RocketStartState start_state;
 
     ///////////////////////////////////////////////////////////////////////////////////////////////
     // dynamic state                                                                             //
@@ -104,7 +116,7 @@ class Rocket {
     Vec3 I_body = {0, 0, 0};    // moments of inertia about the combined CM, body frame
     double z_cm = 0;            // combined CM along body +z, from the active stage's aft edge (m)
 
-    // kinematic state: ECI frame, base SI units, relative to the rocket's center of mass
+    // kinematic state
     Vec3 r = {0, 0, 0};             // position (m)
     Vec3 v = {0, 0, 0};             // velocity (m/s)
     Vec3 a = {0, 0, 0};             // acceleration (m/s^2)

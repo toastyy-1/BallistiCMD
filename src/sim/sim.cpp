@@ -82,12 +82,8 @@ namespace sim {
                 !!! NOTE !!! THE ROCKET SHOULD NOT BE CONTROLLED FROM HERE AT ALL ASSUMING THE FC IS ACTIVE
             */
 
-            // apply any commands the flight controller posted since the last step
-            if (advance_cmd.exchange(false)) rocket.advance_stage();
-            if (ignite_cmd.exchange(false)) rocket.light_engine();
-            Quat gimbal;
-            { std::lock_guard<std::mutex> lk(mtx); gimbal = gimbal_cmd; }
-            rocket.set_engine_orientation(gimbal);
+            // lets the flight controller process data to send commands to the rocket
+            rocket.update_flight_controller(t);
 
             // update the position, orientation, and mass of the rocket
             rocket.update_mass();
@@ -105,25 +101,9 @@ namespace sim {
     }
 
     void Sim::publish_sim_states() {
-        State s;
-        s.t             = t;
-        s.r             = rocket.get_pos();
-        s.v             = rocket.get_vel();
-        s.a             = rocket.get_acc();
-        s.w             = rocket.get_ang_vel();
-        s.q_rocket      = rocket.get_orientation();
-        s.q_engine      = rocket.get_engine_orientation();
-        s.mass          = rocket.get_mass();
-        s.fuel          = rocket.get_fuel_mass();
-        s.length        = rocket.get_length();
-        s.cm_dist       = rocket_cm_dist;
-        s.engine_dist   = rocket.get_length();
-        s.radius        = rocket.get_radius();
-        s.init          = rocket.get_rocket_initial_states();
-        for (int i = 1; i <= Rocket::NUM_STAGES; i++) s.stages[i - 1] = rocket.get_stage(i);
-
-        std::lock_guard<std::mutex> lk(mtx);
-        snap = s;
+        RocketState s = rocket.get_state();
+        s.t = t;
+        snap.store(s, std::memory_order_release);
     }
 
 

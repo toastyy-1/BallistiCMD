@@ -11,7 +11,6 @@
 int main() {
     sim::Sim s;
     std::thread sim_thread([&]{ s.Run(); });
-    std::thread fc_thread([&]{ flight_controller_loop(s); });
 
 #ifdef USE_BGFX
     renderer::BgfxBackend backend;   // make bgfx
@@ -23,6 +22,5 @@ int main() {
 
     s.Stop();
     sim_thread.join();
-    fc_thread.join();
     return 0;
 }

@@ -14,6 +14,28 @@ Rocket::~Rocket() {
 /**
  * advances the stage of the rocket to the next one
  */
+RocketState Rocket::get_state() const {
+    double length = 0;
+    for (int i = active_idx; i < NUM_STAGES; i++) length += props.stages[i].tip_to_end_length;
+    double s_engine = active().tip_to_end_length - active().engine_distance;
+
+    RocketState s;
+    s.r           = r;
+    s.v           = v;
+    s.a           = a;
+    s.w           = w;
+    s.q_rocket    = q_rocket;
+    s.q_engine    = q_engine;
+    s.mass        = m_current;
+    s.fuel        = m_fuel_current;
+    s.length      = length;
+    s.cm_dist     = length - z_cm;
+    s.engine_dist = length - s_engine;
+    s.radius      = props.radius;
+    s.init        = start_state;
+    return s;
+}
+
 bool Rocket::advance_stage() {
     if (active_idx + 1 < NUM_STAGES) {
         active_idx++;
@@ -374,11 +396,11 @@ void Rocket::set_start(double origin_latitude, double origin_longitude, double t
     Vec3 origin_pos = lat_lon_to_eci(origin_latitude, origin_longitude);
 
     // set the position of the rocket to that asolute position
-    init_state.origin_r_eci = origin_pos;
+    start_state.origin_r_eci = origin_pos;
     set_pos(origin_pos);
 
     // set target position
-    init_state.target_r_eci = lat_lon_to_eci(target_latitude, target_longitude);
+    start_state.target_r_eci = lat_lon_to_eci(target_latitude, target_longitude);
 
     // determine the necessary orientation to achive normal "up" position from surface
     double lat = origin_latitude * M_PI / 180.0;
@@ -402,14 +424,5 @@ void Rocket::set_start(double origin_latitude, double origin_longitude, double t
     
     // set the oritnetaion of the rocket to normal the surface
     set_orientation(q);
-    init_state.origin_q_eci = q;
-}
-
-
-double Rocket::get_length() const {
-    double len = 0;
-    for (int i = active_idx; i < NUM_STAGES; i++) {
-        len += props.stages[i].tip_to_end_length;
-    }
-    return len;
+    start_state.origin_q_eci = q;
 }
