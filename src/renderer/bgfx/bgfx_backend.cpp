@@ -27,9 +27,12 @@
 
 #if defined(_WIN32)
 #include <timeapi.h>
+#elif defined(__linux__)
+#include <dlfcn.h>
 #endif
 
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <cstdint>
 #include <fstream>
@@ -71,6 +74,30 @@ void setVec4(bgfx::UniformHandle u, const RVec3& v, float w = 0.0f) {
     bgfx::setUniform(u, d);
 }
 
+#if defined(__linux__)
+using GlfwGetWaylandDisplayFn = struct wl_display* (*)();
+using GlfwGetWaylandWindowFn = struct wl_surface* (*)(GLFWwindow*);
+
+bool loadGlfwWaylandSymbols(GlfwGetWaylandDisplayFn& displayFn,
+                             GlfwGetWaylandWindowFn& windowFn) {
+    void* lib = dlopen("libglfw.so.3", RTLD_LAZY | RTLD_NOLOAD);
+    if (!lib) {
+        lib = dlopen("libglfw.so", RTLD_LAZY | RTLD_NOLOAD);
+    }
+    if (!lib) {
+        lib = dlopen("libglfw.so.3", RTLD_LAZY);
+    }
+    if (!lib) {
+        return false;
+    }
+
+    displayFn = reinterpret_cast<GlfwGetWaylandDisplayFn>(dlsym(lib, "glfwGetWaylandDisplay"));
+    windowFn  = reinterpret_cast<GlfwGetWaylandWindowFn>(dlsym(lib, "glfwGetWaylandWindow"));
+    dlclose(lib);
+    return displayFn && windowFn;
+}
+#endif
+
 } // namespace
 
 void BgfxBackend::Init(int width, int height, const char* title) {
@@ -105,10 +132,18 @@ void BgfxBackend::Init(int width, int height, const char* title) {
 #elif defined(__APPLE__)
     init.platformData.nwh = glfwGetCocoaWindow(window_);
 #elif defined(__linux__)
-    if (glfwGetPlatform() == GLFW_PLATFORM_WAYLAND) {
-        init.platformData.ndt  = glfwGetWaylandDisplay();
-        init.platformData.nwh  = glfwGetWaylandWindow(window_);
-        init.platformData.type = bgfx::NativeWindowHandleType::Wayland;
+    const char* waylandDisplay = std::getenv("WAYLAND_DISPLAY");
+    if (waylandDisplay != nullptr) {
+        GlfwGetWaylandDisplayFn waylandDisplayFn = nullptr;
+        GlfwGetWaylandWindowFn waylandWindowFn = nullptr;
+        if (loadGlfwWaylandSymbols(waylandDisplayFn, waylandWindowFn)) {
+            init.platformData.ndt  = waylandDisplayFn();
+            init.platformData.nwh  = waylandWindowFn(window_);
+            init.platformData.type = bgfx::NativeWindowHandleType::Wayland;
+        } else {
+            init.platformData.ndt = glfwGetX11Display();
+            init.platformData.nwh = (void*)(uintptr_t)glfwGetX11Window(window_);
+        }
     } else {
         init.platformData.ndt = glfwGetX11Display();
         init.platformData.nwh = (void*)(uintptr_t)glfwGetX11Window(window_);
