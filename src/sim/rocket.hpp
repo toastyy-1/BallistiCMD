@@ -18,6 +18,7 @@ struct Stage {
 
     double exhaust_velocity() const { return isp * g0; }
     double mass_flow_rate() const { return isp > 0 ? thrust / exhaust_velocity() : 0.0; }
+    double max_mass_flow_rate() const { return isp > 0 ? max_thrust / exhaust_velocity() : 0.0; }
 };
 
 struct RocketStartState {

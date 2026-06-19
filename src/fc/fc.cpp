@@ -62,6 +62,12 @@ FCInitState FlightController::create_target_trajectory(double lat_target, double
     if (launch_azimuth < 0) launch_azimuth += 2.0 * M_PI;
     out.launch_asimuth = launch_azimuth;
 
+    // stage 1 burn time
+    out.stage_burn_time[0] = r.props.stages[0].m_fuel / r.props.stages[0].max_mass_flow_rate();
+
+    // stage 2 burn time
+    out.stage_burn_time[1] = r.props.stages[1].m_fuel / r.props.stages[1].max_mass_flow_rate();
+
     // return all our calculated stuff yay!
     return out;
 }
@@ -134,13 +140,13 @@ void FlightController::flight_controller_process(Rocket& r, double current_time)
 
         static double start = cs.time;
         static bool is_separated = false;
-        if (cs.time - start > 130 && !is_separated) {
+        if (cs.time - start > cs.is.stage_burn_time[0] && !is_separated) {
             r.advance_stage();
             is_separated = true;
             r.light_engine();
         }
 
-        const double turn_time = 3.0;
+        const double turn_time = 3.5;
         static double turn_time_start = cs.time;
         if ((cs.time - turn_time_start) < turn_time) {
             double half = (0.3 * M_PI / 180.0) / 2.0;
