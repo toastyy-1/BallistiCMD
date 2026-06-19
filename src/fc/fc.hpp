@@ -9,6 +9,8 @@ class Rocket;
 struct FCInitState {
     Vec3 r_origin, r_target;
 
+    double launch_asimuth;
+
     Vec3 v_s1_bo_T;
     Vec3 r_s1_bo_T;
 

@@ -50,37 +50,17 @@ FCInitState FlightController::create_target_trajectory(double lat_target, double
         EARTH_RADIUS * sin(lat_target)
     };
 
-    // determine trajectory parameters
-    // https://cmp.felk.cvut.cz/~kukelova/pajdla/Bate,%20Mueller,%20and%20White%20-%20Fundamentals%20of%20Astrodynamics.pdf
-    // page 277
-    double range_angle = acos(out.r_origin.dot(out.r_target) / (EARTH_RADIUS * EARTH_RADIUS));
+    // determine rocket dependent quantities and things
+    double delta_v_first_stage = r.props.stages[0].isp * g0 * log((r.props.stages[0].m_dry + r.props.stages[0].m_fuel) / r.props.stages[0].m_dry ); // rocket equation yay
 
-    double h_burnout = 80e3;
-    double r_burnout = EARTH_RADIUS + h_burnout;
-
-    double sin_half = sin(range_angle / 2.0);
-    double v_burnout = sqrt(2.0 * GM_EARTH * sin_half / (r_burnout * (1.0 + sin_half)));
-
-    double fpa = 0.25 * (M_PI - range_angle); // flight path angle at burnout
-    double sma = 0.5 * r_burnout * (1.0 + sin_half);
-    double ecc = cos(range_angle / 2.0) / (1.0 + sin_half);
-    double E_bo = acos(-ecc); // eccentric anomaly at burnout
-    out.target_tof = 2.0 * sqrt(sma * sma * sma / GM_EARTH) * (M_PI - (E_bo - ecc * sin(E_bo)));
-
-    // stage 1 burnout
-    double m0 = 0;
-    for (const Stage& stg : r.props.stages) {
-        m0 += stg.m_dry + stg.m_fuel;
-    }
-    const Stage s1 = r.props.stages[0];
-    double t_burn = s1.m_fuel * s1.exhaust_velocity() / s1.max_thrust;
-    double v_s1_bo = s1.exhaust_velocity() * log(m0 / (m0 - s1.m_fuel)) - g0 * t_burn;
-    double h_s1_bo = 0.5 * v_s1_bo * t_burn;
-
-    Vec3 up = out.r_origin / EARTH_RADIUS;
-    Vec3 downrange = (out.r_target - up * out.r_target.dot(up)).normalized();
-    out.r_s1_bo_T = up * (EARTH_RADIUS + h_s1_bo);
-    out.v_s1_bo_T = (downrange * cos(fpa) + up * sin(fpa)) * v_s1_bo;
+    // launch azimuth
+    double delta_long = long_target - long_origin;
+    double launch_azimuth = atan2(
+        sin(delta_long) * cos(lat_target),
+        cos(lat_origin) * sin(lat_target) - sin(lat_origin) * cos(lat_target) * cos(delta_long)
+    );
+    if (launch_azimuth < 0) launch_azimuth += 2.0 * M_PI;
+    out.launch_asimuth = launch_azimuth;
 
     // return all our calculated stuff yay!
     return out;
