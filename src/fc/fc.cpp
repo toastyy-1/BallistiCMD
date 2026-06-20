@@ -11,6 +11,7 @@
 #include "imu.hpp"
 #include "types.hpp"
 #include "sim/rocket.hpp"
+#include "fc/stages.hpp"
 
 Vec3 INS::read_INS_acc(const Rocket& r) {
     Vec3 specific_force_eci = r.a - gravity_eci(r.r);
@@ -50,6 +51,22 @@ FCInitState FlightController::create_target_trajectory(double lat_target, double
         EARTH_RADIUS * sin(lat_target)
     };
 
+    Vec3 unit_vec_from_center = {
+        .x = cos(lat_origin) * cos(long_origin),
+        .y = cos(lat_origin) * sin(long_origin),
+        .z = sin(lat_origin)
+    };
+    Vec3 up = {0, 0, 1};
+    Vec3 rotation_axis = up.cross(unit_vec_from_center);
+    Vec3 rot_axis_u = rotation_axis / rotation_axis.norm();
+    double half_theta = acos(sin(lat_origin)) / 2;
+    out.q_origin = {
+        .w = cos(half_theta),
+        .x = sin(half_theta) * rot_axis_u.x,
+        .y = sin(half_theta) * rot_axis_u.y,
+        .z = sin(half_theta) * rot_axis_u.z
+    };
+
     // determine rocket dependent quantities and things
     double delta_v_first_stage = r.props.stages[0].isp * g0 * log((r.props.stages[0].m_dry + r.props.stages[0].m_fuel) / r.props.stages[0].m_dry ); // rocket equation yay
 
@@ -79,6 +96,7 @@ void FlightController::init(Rocket& r, double current_time) {
     cs.time = current_time;
     cs.is = create_target_trajectory(38.9072, -77.0369, r);
     cs.r = cs.is.r_origin; // set initial r to starting r
+    cs.att = cs.is.q_origin; // set initial orientation
     countdown_start = current_time;
 }
 
@@ -96,6 +114,8 @@ void FlightController::pull_new_data(const Rocket& r, double current_time) {
 
 // estimate state of the rocket in flight at the current moment
 void FlightController::estimate_state() {
+    // position and velocity 
+
     // determine true acceleration from gravity based on past position state
     double r_norm = cs.r.norm();
     Vec3 g = cs.r * (-1.0 * GM_EARTH / (r_norm * r_norm * r_norm));
@@ -106,6 +126,33 @@ void FlightController::estimate_state() {
 
     // add delta r based on v to current r
     cs.r = cs.r + cs.v * cs.dt;
+
+    // now for attitude estimation
+
+    // q_dot = 0.5 * Ω(w) * q
+    Mat4 omega_w = {{
+        {     0.0, -cs.w.x, -cs.w.y, -cs.w.z },
+        {  cs.w.x,     0.0,  cs.w.z, -cs.w.y },
+        {  cs.w.y, -cs.w.z,     0.0,  cs.w.x },
+        {  cs.w.z,  cs.w.y, -cs.w.x,     0.0 },
+    }};
+
+    // integrate quaternion rate
+    Quat q_dot = omega_w * cs.att;
+    cs.att.w += 0.5 * q_dot.w * cs.dt;
+    cs.att.x += 0.5 * q_dot.x * cs.dt;
+    cs.att.y += 0.5 * q_dot.y * cs.dt;
+    cs.att.z += 0.5 * q_dot.z * cs.dt;
+
+    // normalize quaternion bc computer shit
+    cs.att = cs.att.normalize();
+}
+
+Quat FlightController::quat_from_target_pos(Vec3 position, Vec3 target) {
+    // unit vector to taget point
+    Vec3 u = (target - position).normalized();
+
+    
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -129,34 +176,13 @@ void FlightController::flight_controller_process(Rocket& r, double current_time)
     case STANDBY:
         break;
     case ARMED:
-        if (cs.time - countdown_start >= HOLD_DURATION) cs.stage = STAGE_1_POWERED;
+        if (cs.time - countdown_start >= HOLD_DURATION) {
+            cs.stage = STAGE_1_POWERED;
+            r.light_engine();
+        }
         break;
     case STAGE_1_POWERED: {
-        static bool engine_lit = false;
-        if (!engine_lit) {
-            r.light_engine();
-            engine_lit = true;
-        }
-
-        static double start = cs.time;
-        static bool is_separated = false;
-        if (cs.time - start > cs.is.stage_burn_time[0] && !is_separated) {
-            r.advance_stage();
-            is_separated = true;
-            r.light_engine();
-        }
-
-        const double turn_time = 3.5;
-        static double turn_time_start = cs.time;
-        if ((cs.time - turn_time_start) < turn_time) {
-            double half = (0.3 * M_PI / 180.0) / 2.0;
-            r.set_engine_orientation( {std::cos(half), 0.0, std::sin(half), 0.0} );
-        }
-        else if ((cs.time - turn_time_start) < 2.0 * turn_time) {
-            double half = (-0.3 * M_PI / 180.0) / 2.0;
-            r.set_engine_orientation( {std::cos(half), 0.0, std::sin(half), 0.0} );
-        }
-        else r.set_engine_orientation({1, 0, 0, 0});
+        s1_powered(r, cs);
         break;
     }
     case STAGE_2_UNPOWERED:

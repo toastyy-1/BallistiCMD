@@ -8,6 +8,7 @@ class Rocket;
 // the intitial states that the rocket starts at
 struct FCInitState {
     Vec3 r_origin, r_target;
+    Quat q_origin;
 
     double launch_asimuth;
 
@@ -65,8 +66,10 @@ class FlightController {
     ControlStates cs;
     double countdown_start = 0;
 
+    // helpers
     FCInitState create_target_trajectory(double lat_target, double long_target, Rocket& r);
     void estimate_state();
     void pull_new_data(const Rocket& r, double current_time);
+    Quat quat_from_target_pos(Vec3 position, Vec3 target); // creates a quaternion from current position to a designated target position
 
 };
