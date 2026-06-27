@@ -47,6 +47,21 @@ struct Quat {
         double mag = norm();
         return {w / mag, x / mag, y / mag, z / mag};
     }
+
+    Quat operator*(const Quat& o) const {
+        return {
+            w*o.w - x*o.x - y*o.y - z*o.z,
+            w*o.x + x*o.w + y*o.z - z*o.y,
+            w*o.y - x*o.z + y*o.w + z*o.x,
+            w*o.z + x*o.y - y*o.x + z*o.w,
+        };
+    }
+
+    Quat conjugate() const { return {w, -x, -y, -z}; }
+    Quat inverse() const {
+        double n2 = w*w + x*x + y*y + z*z;
+        return {w / n2, -x / n2, -y / n2, -z / n2};
+    }
 };
 
 inline Quat operator*(const Mat4& M, const Quat& q) {

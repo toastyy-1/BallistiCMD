@@ -2,6 +2,7 @@
 
 #include "types.hpp"
 #include "imu.hpp"
+#include "sim/properties.hpp"
 
 class Rocket;
 
@@ -22,13 +23,23 @@ struct FCInitState {
 
 // holds the rockets staging patterns
 enum MissionStage {
-    STANDBY,
-    ARMED,
-    STAGE_1_POWERED,
-    STAGE_2_UNPOWERED,
-    STAGE_2_POWERED,
-    PAYLOAD_DEPLOY
+    STANDBY = -2,
+    ARMED = -1,
+    STAGE_1 = 0,
+    STAGE_2 = 1,
+    PAYLOAD_DEPLOY = 2
 };
+
+inline MissionStage& operator++(MissionStage& s) {
+    s = static_cast<MissionStage>(static_cast<int>(s) + 1);
+    return s;
+}
+
+inline MissionStage operator++(MissionStage& s, int) {
+    MissionStage guh = s;
+    ++s;
+    return guh;
+}
 
 // holds the states of controls for the rocket
 struct ControlStates {
@@ -41,9 +52,14 @@ struct ControlStates {
     Vec3 r;
     Vec3 w;
     Quat att; // attitude
+    Quat target_att; // the current iterations target attitude
 
     double dt; // time from last time measurement
     double time;
+    double stage_burn_time_start; // mission time the current stage's engine was lit
+
+    bool light_engine_flag = false; // set to true if you want to light the engine on that step
+    bool separate_stage_flag = false; // set to true if you want to separate stage on that step
 
     // initial states
     FCInitState is;
@@ -51,10 +67,8 @@ struct ControlStates {
 
 class FlightController {
     public:
-    FlightController() = default;
-
-    // configure against a fully set up rocket
-    void init(Rocket& r, double current_time);
+    // load a fully set up rocket config/geometry into the FC and set up initial state
+    FlightController(Rocket& r, double current_time);
 
     // perform flight controller operations (should be called every time we want to update the FC)
     void flight_controller_process(Rocket& r, double current_time);
@@ -62,14 +76,23 @@ class FlightController {
     private:
     static constexpr double HOLD_DURATION = 80.0;
 
+    // rocket geometry copied from the rocket part of sim once at startup
+    const RocketProps props;
+
     INS ins;
     ControlStates cs;
     double countdown_start = 0;
 
     // helpers
+    void init(Rocket& r, double current_time);
     FCInitState create_target_trajectory(double lat_target, double long_target, Rocket& r);
     void estimate_state();
     void pull_new_data(const Rocket& r, double current_time);
-    Quat quat_from_target_pos(Vec3 position, Vec3 target); // creates a quaternion from current position to a designated target position
+    Quat quat_from_vec(Vec3 u);
+    Quat set_new_engine_gimbal_quat();
+
+    // stages
+    void s1_powered();
+    void s2_powered();
 
 };

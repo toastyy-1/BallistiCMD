@@ -29,7 +29,7 @@ namespace sim {
             .m_fuel = 20780.0,
             .isp = 238.0,
             .tip_to_end_length = 7.49,
-            .CM_dist = 3.75,
+            .CoM_dist = 3.75,
             .max_thrust = 792000.0,
             .engine_distance = 7.49,
             .engine_gimball_range = 5.0
@@ -41,7 +41,7 @@ namespace sim {
             .m_fuel = 6170.0,
             .isp = 292.0,
             .tip_to_end_length = 4.12,
-            .CM_dist = 2.06,
+            .CoM_dist = 2.06,
             .max_thrust = 267700.0,
             .engine_distance = 4.12,
             .engine_gimball_range = 5.0
@@ -53,7 +53,7 @@ namespace sim {
             .m_fuel = 0.0,
             .isp = 0.0,
             .tip_to_end_length = 1.0,
-            .CM_dist = 0.5,
+            .CoM_dist = 0.5,
             .max_thrust = 0.0,
             .engine_distance = 1.0,
             .engine_gimball_range = 0.0

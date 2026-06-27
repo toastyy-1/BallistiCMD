@@ -11,7 +11,6 @@
 #include "imu.hpp"
 #include "types.hpp"
 #include "sim/rocket.hpp"
-#include "fc/stages.hpp"
 
 Vec3 INS::read_INS_acc(const Rocket& r) {
     Vec3 specific_force_eci = r.a - gravity_eci(r.r);
@@ -26,6 +25,11 @@ Vec3 INS::read_INS_gyr(const Rocket& r) {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 // startup                                                                                   //
 ///////////////////////////////////////////////////////////////////////////////////////////////
+
+FlightController::FlightController(Rocket& r, double current_time) : props(r.props) {
+    cs.stage = STANDBY;
+}
+
 FCInitState FlightController::create_target_trajectory(double lat_target, double long_target, Rocket& r) {
     FCInitState out;
 
@@ -68,7 +72,7 @@ FCInitState FlightController::create_target_trajectory(double lat_target, double
     };
 
     // determine rocket dependent quantities and things
-    double delta_v_first_stage = r.props.stages[0].isp * g0 * log((r.props.stages[0].m_dry + r.props.stages[0].m_fuel) / r.props.stages[0].m_dry ); // rocket equation yay
+    double delta_v_first_stage = props.stages[0].isp * g0 * log((props.stages[0].m_dry + props.stages[0].m_fuel) / props.stages[0].m_dry ); // rocket equation yay
 
     // launch azimuth
     double delta_long = long_target - long_origin;
@@ -80,10 +84,10 @@ FCInitState FlightController::create_target_trajectory(double lat_target, double
     out.launch_asimuth = launch_azimuth;
 
     // stage 1 burn time
-    out.stage_burn_time[0] = r.props.stages[0].m_fuel / r.props.stages[0].max_mass_flow_rate();
+    out.stage_burn_time[0] = props.stages[0].m_fuel / props.stages[0].max_mass_flow_rate();
 
     // stage 2 burn time
-    out.stage_burn_time[1] = r.props.stages[1].m_fuel / r.props.stages[1].max_mass_flow_rate();
+    out.stage_burn_time[1] = props.stages[1].m_fuel / props.stages[1].max_mass_flow_rate();
 
     // return all our calculated stuff yay!
     return out;
@@ -94,9 +98,14 @@ void FlightController::init(Rocket& r, double current_time) {
     cs = {};
     cs.stage = ARMED;
     cs.time = current_time;
-    cs.is = create_target_trajectory(38.9072, -77.0369, r);
+
+    double tgt_lat = asin(r.start_state.target_r_eci.z / r.start_state.target_r_eci.norm()) * RAD_TO_DEG;
+    double tgt_long = atan2(r.start_state.target_r_eci.y, r.start_state.target_r_eci.x) * RAD_TO_DEG;
+    cs.is = create_target_trajectory(tgt_lat, tgt_long, r);
+
     cs.r = cs.is.r_origin; // set initial r to starting r
     cs.att = cs.is.q_origin; // set initial orientation
+    cs.target_att = cs.is.q_origin;
     countdown_start = current_time;
 }
 
@@ -148,11 +157,81 @@ void FlightController::estimate_state() {
     cs.att = cs.att.normalize();
 }
 
-Quat FlightController::quat_from_target_pos(Vec3 position, Vec3 target) {
-    // unit vector to taget point
-    Vec3 u = (target - position).normalized();
+// returns quaternion that points in direction of
+Quat FlightController::quat_from_vec(Vec3 u) {
+    u = u.normalized();
 
-    
+    // quaternion of the shortest arc from nose to u
+    Quat q = {
+        .w = 1.0 + u.z,
+        .x = -u.y,
+        .y =  u.x,
+        .z =  0.0,
+    };
+    return q.normalize();
+}
+
+// sets the engine gimbal based on target orientation
+Quat FlightController::set_new_engine_gimbal_quat() {
+    if (cs.stage < STAGE_1) return {1, 0, 0, 0};
+
+    Quat target = cs.target_att;
+    Quat current = cs.att;
+
+    // calculate error between the two quaternions
+    Quat q_err = current.inverse() * target;
+    if (q_err.w < 0) q_err = {-q_err.w, -q_err.x, -q_err.y, -q_err.z};
+
+    // for small angles the vector part of the error quaternion is proportional 
+    // to the rotational error about body axis. n is the roll, pitch, yaw error in radians
+    Vec3 n = { .x = 2 * q_err.x, .y = 2 * q_err.y, .z = 2 * q_err.z };
+
+    // calculate required torque using PD
+    double K_p = 0.5;
+    double K_d = 0.5;
+    Vec3 tau_req = (n * K_p) - (cs.w * K_d);
+
+    // map torque to gimball command angles
+
+    // active stage index for the current mission stage
+    const Stage& s = props.stages[cs.stage];
+
+    // calculate the CoM of the rocket
+    double M = 0.0, m_CoM = 0.0, base = 0.0;
+    for (int i = cs.stage; i < ROCKET_NUM_STAGES; i++) {
+        const Stage& st = props.stages[i];
+        double m = st.m_dry + st.m_fuel;
+        M += m;
+        m_CoM += m * (base + st.tip_to_end_length - st.CoM_dist);
+        base += st.tip_to_end_length;
+    }
+    double z_cm = m_CoM / M;
+
+    // engine gimbal point
+    double s_engine = s.tip_to_end_length - s.engine_distance;
+
+    // moment arm from the engine gimbal point to the rocket CoM
+    double moment_arm = z_cm - s_engine;
+
+    double R2 = props.radius * props.radius;
+    double I = 0.0;
+    base = 0.0;
+    for (int i = cs.stage; i < ROCKET_NUM_STAGES; i++) {
+        const Stage& st = props.stages[i];
+        double m = st.m_dry + st.m_fuel, L = st.tip_to_end_length;
+        double d = (base + L - st.CoM_dist) - z_cm;
+        I += (1.0 / 12.0) * m * (3.0 * R2 + L * L) + m * d * d;
+        base += L;
+    }
+
+    // calculate required pitch and yaw for engine
+    double pitch = -I * tau_req.x / (s.max_thrust * moment_arm);
+    double yaw = -I * tau_req.y / (s.max_thrust * moment_arm);
+
+    // determine nozzzle deflection from body in quaternion orientation from pitch and yaw commands
+    Quat q_pitch = { cos(pitch / 2), sin(pitch / 2), 0.0, 0.0 };
+    Quat q_yaw = { cos(yaw / 2), 0.0, sin(yaw / 2), 0.0 };
+    return (q_pitch * q_yaw).normalize();
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -166,31 +245,52 @@ void FlightController::flight_controller_process(Rocket& r, double current_time)
     // control inside         //
     ////////////////////////////
 
+    // NOTE!! I have chosen to pass the rocket struct into as few functions as possible unless absolutely necessary.
+    // this means that anything staging function inside the switch statement shouldnt execute functions on the rocket
+    // directly so the behavior isnt hidden and we dont accidentally do shit we dont want to
+
+    if (cs.stage == STANDBY) init(r, current_time);
+
     // get latest data from the INS and advance the clock
     pull_new_data(r, current_time);
 
     // estimate state based on pulled data
     estimate_state();
 
+    // manages setting a target attitude for the engine gimballing stuff depending on what the stage is
     switch (cs.stage) {
     case STANDBY:
         break;
     case ARMED:
         if (cs.time - countdown_start >= HOLD_DURATION) {
-            cs.stage = STAGE_1_POWERED;
-            r.light_engine();
+            cs.light_engine_flag = true;
+            cs.stage_burn_time_start = cs.time;
+            cs.stage++;
         }
         break;
-    case STAGE_1_POWERED: {
-        s1_powered(r, cs);
+    case STAGE_1: {
+        s1_powered();
         break;
     }
-    case STAGE_2_UNPOWERED:
-        break;
-    case STAGE_2_POWERED:
+    case STAGE_2:
+        s2_powered();
         break;
     case PAYLOAD_DEPLOY:
         break;
     }
 
+    // check if the stage was supposed to be separated
+    if (cs.separate_stage_flag) {
+        cs.separate_stage_flag = false;
+        r.advance_stage();
+    }
+
+    // check if engine was supposed to be lit
+    if (cs.light_engine_flag) {
+        cs.light_engine_flag = false;
+        r.light_engine();
+    }
+
+    // send targeting commands to the engine gimbal system based on target attitude in cs
+    r.set_engine_orientation(set_new_engine_gimbal_quat());
 }

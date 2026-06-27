@@ -327,7 +327,7 @@ void Rocket::update_mass() {
         double m = st.m_dry + st.m_fuel;
         M += m;
         M_f += st.m_fuel;
-        m_cm += m * (base + st.tip_to_end_length - st.CM_dist);
+        m_cm += m * (base + st.tip_to_end_length - st.CoM_dist);
         base += st.tip_to_end_length;
     }
     m_current = M;
@@ -340,7 +340,7 @@ void Rocket::update_mass() {
     for (int i = active_idx; i < NUM_STAGES; i++) {
         const Stage& st = props.stages[i];
         double m = st.m_dry + st.m_fuel, L = st.tip_to_end_length;
-        double d = (base + L - st.CM_dist) - z_cm;
+        double d = (base + L - st.CoM_dist) - z_cm;
         I_trans += (1.0 / 12.0) * m * (3.0 * R2 + L * L) + m * d * d;
         base += L;
     }

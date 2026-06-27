@@ -1,25 +1,10 @@
 #pragma once
 #include "types.hpp"
 #include "constants.hpp"
+#include "sim/properties.hpp"
 #include "fc/fc.hpp"
 #include <array>
-
-struct Stage {
-    double id;
-    double m_dry;                   // dry mass
-    double m_fuel;                  // fuel mass
-    double isp;                     // specific impulse (s)
-    double tip_to_end_length;       // m
-    double CM_dist;                 // dist of center of mass from front edge of the stage
-    double max_thrust;              // rated (max) motor thrust
-    double thrust;                  // current commanded thrust
-    double engine_distance;         // distance of engine from leading edge
-    double engine_gimball_range;    // rad
-
-    double exhaust_velocity() const { return isp * g0; }
-    double mass_flow_rate() const { return isp > 0 ? thrust / exhaust_velocity() : 0.0; }
-    double max_mass_flow_rate() const { return isp > 0 ? max_thrust / exhaust_velocity() : 0.0; }
-};
+#include <optional>
 
 struct RocketStartState {
     Vec3 origin_r_eci;
@@ -47,7 +32,7 @@ class Rocket {
     ///////////////////////////////////////////////////////////////////////////////////////////////
     public:
 
-    static constexpr int NUM_STAGES = 3; // stage_1, stage_2, payload
+    static constexpr int NUM_STAGES = ROCKET_NUM_STAGES; // stage_1, stage_2, payload
 
     // setup
     Rocket();
@@ -69,8 +54,8 @@ class Rocket {
     void update_rotation();
     void update_mass();
     void update_flight_controller(double current_time) {
-        if (!fc_initialized) { fc.init(*this, current_time); fc_initialized = true; }
-        fc.flight_controller_process(*this, current_time);
+        if (!fc) fc.emplace(*this, current_time); // loads rocket config into the FC on first run
+        fc->flight_controller_process(*this, current_time);
     }
 
     // used by flight controller
@@ -86,22 +71,12 @@ class Rocket {
     ///////////////////////////////////////////////////////////////////////////////////////////////
     // rocket static configuration                                                               //
     ///////////////////////////////////////////////////////////////////////////////////////////////
-    FlightController fc;
-    bool fc_initialized = false;
+    std::optional<FlightController> fc;
 
     ///////////////////////////////////////////////////////////////////////////////////////////////
     // rocket static configuration                                                               //
     ///////////////////////////////////////////////////////////////////////////////////////////////
-    struct Properties {
-        double radius = 0;  // hull radius for the solid-cylinder inertia model (m)
-        double Cd = 0.0;    // drag coefficient
-        std::array<Stage, NUM_STAGES> stages = {{
-            { .id = 1 },
-            { .id = 2 },
-            { .id = 3 },
-        }};
-    };
-    Properties props;
+    RocketProps props;
 
     // initial launch geometry (origin, target, launch attitude, such things)
     RocketStartState start_state;
