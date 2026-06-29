@@ -25,37 +25,37 @@ namespace sim {
 
         Stage s1 = {
             .id = 1,
-            .m_dry = 2292.0,
-            .m_fuel = 20780.0,
-            .isp = 238.0,
-            .tip_to_end_length = 7.49,
-            .CoM_dist = 3.75,
-            .max_thrust = 792000.0,
-            .engine_distance = 7.49,
+            .m_dry = 4000.0,
+            .m_fuel = 117910.0,
+            .isp = 296.0,
+            .tip_to_end_length = 21.4,
+            .CoM_dist = 11.0,
+            .max_thrust = 2200000.0,
+            .engine_distance = 21.4,
             .engine_gimball_range = 5.0
         };
 
         Stage s2 = {
             .id = 2,
-            .m_dry = 1107.0,
-            .m_fuel = 6170.0,
-            .isp = 292.0,
-            .tip_to_end_length = 4.12,
-            .CoM_dist = 2.06,
-            .max_thrust = 267700.0,
-            .engine_distance = 4.12,
+            .m_dry = 2800.0,
+            .m_fuel = 27200.0,
+            .isp = 316.0,
+            .tip_to_end_length = 9.4,
+            .CoM_dist = 4.7,
+            .max_thrust = 445000.0,
+            .engine_distance = 9.4,
             .engine_gimball_range = 5.0
         };
 
         Stage payload = {
             .id = 3,
-            .m_dry = 1150.0,
+            .m_dry = 3700.0,
             .m_fuel = 0.0,
             .isp = 0.0,
-            .tip_to_end_length = 1.0,
-            .CoM_dist = 0.5,
+            .tip_to_end_length = 3.1,
+            .CoM_dist = 1.5,
             .max_thrust = 0.0,
-            .engine_distance = 1.0,
+            .engine_distance = 3.1,
             .engine_gimball_range = 0.0
         };
 
@@ -63,7 +63,7 @@ namespace sim {
         rocket.set_stage(2, s2);
         rocket.set_stage(3, payload);
 
-        rocket.set_radius(0.84);
+        rocket.set_radius(1.524);
     }
 
     void Sim::Run() {
