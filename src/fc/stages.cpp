@@ -7,8 +7,8 @@ void FlightController::s1_powered() {
     ///////////////////////////////////////////////////////////////////////////
     // do initial turn towards target before gravity turn starts
     ///////////////////////////////////////////////////////////////////////////
-    constexpr double init_turn_len = 10.0; // seconds
-    constexpr double init_tilt_angle = 20.0 * DEG_TO_RAD;
+    constexpr double init_turn_len = 20.0; // seconds
+    constexpr double init_tilt_angle = 2.0 * DEG_TO_RAD;
 
     if (dt < init_turn_len) {
         Vec3 up = cs.r.normalized();
