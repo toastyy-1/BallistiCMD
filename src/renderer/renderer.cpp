@@ -336,7 +336,7 @@ void Renderer::DrawTelemetry() const {
     // counts in sync with the sections so the box always wraps the text exactly.
     const int x = 10, valx = 165;
     const int fs = 16, lh = 18, hh = lh + 6;  // row height, header block height
-    const int nHeaders = 6, nRows = 17;
+    const int nHeaders = 6, nRows = 13;
     int y = 12;
     const int panelW = 320;
     const int panelH = y + nHeaders * hh + nRows * lh + 8;
@@ -362,19 +362,15 @@ void Renderer::DrawTelemetry() const {
     row("Propellant", fmt("%8.1f kg", fuel),      fuel < 50.0 ? kRed : kGreen);
 
     header("ECI POSITION (km)");
-    row("X",  fmt("%+14.3f", r.x * M_TO_KM), kWhite);
-    row("Y",  fmt("%+14.3f", r.y * M_TO_KM), kWhite);
-    row("Z",  fmt("%+14.3f", r.z * M_TO_KM), kWhite);
+    row("X",  fmt("%+12.3f", r.x * M_TO_KM), kWhite);
+    row("Y",  fmt("%+12.3f", r.y * M_TO_KM), kWhite);
+    row("Z",  fmt("%+12.3f", r.z * M_TO_KM), kWhite);
 
-    header("ECI VELOCITY (m/s)");
-    row("Vx", fmt("%+14.3f", v.x), kWhite);
-    row("Vy", fmt("%+14.3f", v.y), kWhite);
-    row("Vz", fmt("%+14.3f", v.z), kWhite);
+    header("VELOCITY (m/s)");
+    row("Speed", fmt("%12.3f", v.norm()), kWhite);
 
-    header("ECI ACCELERATION (m/s^2)");
-    row("Ax", fmt("%+14.6f", a.x), kWhite);
-    row("Ay", fmt("%+14.6f", a.y), kWhite);
-    row("Az", fmt("%+14.6f", a.z), kWhite);
+    header("ACCELERATION (m/s^2)");
+    row("Accel", fmt("%12.6f", a.norm()), kWhite);
 
     header("ATTITUDE");
     row("Pitch",      fmt("%+8.2f deg", pitch),    kWhite);

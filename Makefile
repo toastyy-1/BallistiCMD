@@ -26,10 +26,10 @@ BGFX_LIBS   := $(BGFX_DIR)/cmake/bgfx/libbgfx.a \
                $(BGFX_DIR)/cmake/bx/libbx.a
 
 ifeq ($(OS),Windows_NT)
-    LDLIBS       := -lraylib -lopengl32 -lgdi32 -lwinmm
+    LDLIBS       := -lraylib -lopengl32 -lgdi32 -lwinmm -latomic
     TARGET       := program.exe
     BGFX_TARGET  := program-bgfx.exe
-    BGFX_SYSLIBS := -lglfw3 -lopengl32 -lgdi32 -luser32 -lshell32 -lkernel32 -lwinmm
+    BGFX_SYSLIBS := -lglfw3 -lopengl32 -lgdi32 -luser32 -lshell32 -lkernel32 -lwinmm -latomic
     SHADERC      := $(BGFX_DIR)/cmake/bgfx/shaderc.exe
     CMAKE_GEN    := MinGW Makefiles
     RM           := del /Q
