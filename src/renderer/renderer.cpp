@@ -36,6 +36,10 @@ RVec3 rvNorm(const RVec3& v) {
     return { v.x/n, v.y/n, v.z/n };
 }
 
+RVec3 rvCross(const RVec3& a, const RVec3& b) {
+    return { a.y*b.z - a.z*b.y, a.z*b.x - a.x*b.z, a.x*b.y - a.y*b.x };
+}
+
 // An ECI direction, expressed as a unit vector in view space. Mirrors ToView's
 // (x,y,z)->(x,z,-y) reorientation; the metre->km scale drops out under normalize.
 RVec3 rvDir(const Vec3& d) {
@@ -144,6 +148,7 @@ void Renderer::DrawFrame(const RCamera& cam) {
         DrawEarth(cam, earthC);
         DrawECIAxes();
         DrawBodyAxes();
+        DrawStateVectors();
         DrawSurfaceMarkers();
         DrawPredictedTrajectory();
         DrawRocket();
@@ -278,6 +283,43 @@ void Renderer::DrawBodyAxes() const {
         { {0,0,0}, kSkyBlue }, { tip(qrot(q, {0, 0, 1})), kSkyBlue },  // body Z (nose)
     };
     backend_.DrawLines(bx, 6, 2.0f);
+}
+
+void Renderer::DrawStateVectors() const {
+    // Velocity and net-acceleration pointers stemming from the rocket's centre
+    // (the world origin). Fixed length (scaled with zoom) — they show direction,
+    // not magnitude, which spans too many orders to draw to scale. Velocity is
+    // drawn a little longer than acceleration so the two stay distinguishable
+    // when they nearly align (e.g. thrust along the velocity vector on ascent).
+    RocketState st = sim_.get_state();
+
+    std::vector<LineVertex> lines;
+    auto arrow = [&](const Vec3& dir_eci, float len, RColor c) {
+        RVec3 d = rvDir(dir_eci);                       // unit direction in view space
+        if (d.x == 0 && d.y == 0 && d.z == 0) return;  // degenerate (near-zero vector)
+        RVec3 tip = { d.x*len, d.y*len, d.z*len };
+        lines.push_back({ {0,0,0}, c });               // shaft: rocket centre -> tip
+        lines.push_back({ tip,     c });
+
+        // Arrowhead: four barbs swept back from the tip along two axes both
+        // perpendicular to the shaft (pick a reference not parallel to d).
+        RVec3 ref  = fabsf(d.y) < 0.99f ? RVec3{0,1,0} : RVec3{1,0,0};
+        RVec3 p1   = rvNorm(rvCross(d, ref));
+        RVec3 p2   = rvNorm(rvCross(d, p1));
+        RVec3 base = { tip.x - d.x*len*0.2f, tip.y - d.y*len*0.2f, tip.z - d.z*len*0.2f };
+        const float hw = len * 0.1f;                    // barb half-spread
+        for (const RVec3& p : { p1, p2 }) {
+            for (float s : { 1.0f, -1.0f }) {
+                RVec3 b = { base.x + p.x*hw*s, base.y + p.y*hw*s, base.z + p.z*hw*s };
+                lines.push_back({ tip, c });
+                lines.push_back({ b,   c });
+            }
+        }
+    };
+
+    arrow(st.v, dist * 0.20f, kYellow);   // velocity (matches the predicted path)
+    arrow(st.a, dist * 0.14f, kOrange);   // net acceleration (gravity + thrust + drag)
+    backend_.DrawLines(lines.data(), lines.size(), 2.0f);
 }
 
 void Renderer::DrawSurfaceMarkers() const {

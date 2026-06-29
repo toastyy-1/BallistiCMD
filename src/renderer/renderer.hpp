@@ -23,6 +23,7 @@ private:
     void DrawEarth(const RCamera& cam, RVec3 earthC);
     void DrawECIAxes() const;
     void DrawBodyAxes() const;
+    void DrawStateVectors() const;
     void DrawSurfaceMarkers() const;
     void DrawRocket() const;
     void DrawPredictedTrajectory() const;
