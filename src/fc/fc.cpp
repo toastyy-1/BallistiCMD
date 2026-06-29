@@ -267,6 +267,8 @@ void FlightController::flight_controller_process(Rocket& r, double current_time)
             cs.stage_burn_time_start = cs.time;
             cs.stage++;
         }
+        
+        cs.v = {0, 0, 0}; // do this because the integrator doesnt account for the normal force so it thinks the rocket moves when sitting on pad
         break;
     case STAGE_1: {
         s1_powered();

@@ -158,10 +158,10 @@ Vec3 Rocket::calc_drag_accel() {
 
     // calcualte the aoa entering into the atmosphere
     Vec3 nose_direction = nose_direction_eci();
-    double AoA = std::acos(std::max(-1.0, std::min(1.0, v_relative.dot(nose_direction) / craft_speed)));
+    //double AoA = std::acos(std::max(-1.0, std::min(1.0, v_relative.dot(nose_direction) / craft_speed)));
     //std::cout << AoA * RAD_TO_DEG << std::endl;
 
-    // apply drag (shid rn add a real drag model idoit) ((idfk how im going to do that simply))
+    // @todo apply drag (shid rn add a real drag model idoit) ((idfk how im going to do that simply))
     double area = M_PI * props.radius * props.radius;
     double drag_mag = 0.5 * air_density * craft_speed * craft_speed * props.Cd * area;
     return v_relative * (-drag_mag / (m_current * craft_speed));
