@@ -36,6 +36,10 @@ RVec3 rvNorm(const RVec3& v) {
     return { v.x/n, v.y/n, v.z/n };
 }
 
+RVec3 rvCross(const RVec3& a, const RVec3& b) {
+    return { a.y*b.z - a.z*b.y, a.z*b.x - a.x*b.z, a.x*b.y - a.y*b.x };
+}
+
 // An ECI direction, expressed as a unit vector in view space. Mirrors ToView's
 // (x,y,z)->(x,z,-y) reorientation; the metre->km scale drops out under normalize.
 RVec3 rvDir(const Vec3& d) {
@@ -144,6 +148,7 @@ void Renderer::DrawFrame(const RCamera& cam) {
         DrawEarth(cam, earthC);
         DrawECIAxes();
         DrawBodyAxes();
+        DrawStateVectors();
         DrawSurfaceMarkers();
         DrawPredictedTrajectory();
         DrawRocket();
@@ -280,6 +285,43 @@ void Renderer::DrawBodyAxes() const {
     backend_.DrawLines(bx, 6, 2.0f);
 }
 
+void Renderer::DrawStateVectors() const {
+    // Velocity and net-acceleration pointers stemming from the rocket's centre
+    // (the world origin). Fixed length (scaled with zoom) — they show direction,
+    // not magnitude, which spans too many orders to draw to scale. Velocity is
+    // drawn a little longer than acceleration so the two stay distinguishable
+    // when they nearly align (e.g. thrust along the velocity vector on ascent).
+    RocketState st = sim_.get_state();
+
+    std::vector<LineVertex> lines;
+    auto arrow = [&](const Vec3& dir_eci, float len, RColor c) {
+        RVec3 d = rvDir(dir_eci);                       // unit direction in view space
+        if (d.x == 0 && d.y == 0 && d.z == 0) return;  // degenerate (near-zero vector)
+        RVec3 tip = { d.x*len, d.y*len, d.z*len };
+        lines.push_back({ {0,0,0}, c });               // shaft: rocket centre -> tip
+        lines.push_back({ tip,     c });
+
+        // Arrowhead: four barbs swept back from the tip along two axes both
+        // perpendicular to the shaft (pick a reference not parallel to d).
+        RVec3 ref  = fabsf(d.y) < 0.99f ? RVec3{0,1,0} : RVec3{1,0,0};
+        RVec3 p1   = rvNorm(rvCross(d, ref));
+        RVec3 p2   = rvNorm(rvCross(d, p1));
+        RVec3 base = { tip.x - d.x*len*0.2f, tip.y - d.y*len*0.2f, tip.z - d.z*len*0.2f };
+        const float hw = len * 0.1f;                    // barb half-spread
+        for (const RVec3& p : { p1, p2 }) {
+            for (float s : { 1.0f, -1.0f }) {
+                RVec3 b = { base.x + p.x*hw*s, base.y + p.y*hw*s, base.z + p.z*hw*s };
+                lines.push_back({ tip, c });
+                lines.push_back({ b,   c });
+            }
+        }
+    };
+
+    arrow(st.v, dist * 0.20f, kYellow);   // velocity (matches the predicted path)
+    arrow(st.a, dist * 0.14f, kOrange);   // net acceleration (gravity + thrust + drag)
+    backend_.DrawLines(lines.data(), lines.size(), 2.0f);
+}
+
 void Renderer::DrawSurfaceMarkers() const {
     // Launch origin and intended target: fixed points on the Earth's surface.
     // Each is a small "pin" — a stalk along the local vertical capped by a
@@ -336,7 +378,7 @@ void Renderer::DrawTelemetry() const {
     // counts in sync with the sections so the box always wraps the text exactly.
     const int x = 10, valx = 165;
     const int fs = 16, lh = 18, hh = lh + 6;  // row height, header block height
-    const int nHeaders = 6, nRows = 17;
+    const int nHeaders = 6, nRows = 13;
     int y = 12;
     const int panelW = 320;
     const int panelH = y + nHeaders * hh + nRows * lh + 8;
@@ -362,19 +404,15 @@ void Renderer::DrawTelemetry() const {
     row("Propellant", fmt("%8.1f kg", fuel),      fuel < 50.0 ? kRed : kGreen);
 
     header("ECI POSITION (km)");
-    row("X",  fmt("%+14.3f", r.x * M_TO_KM), kWhite);
-    row("Y",  fmt("%+14.3f", r.y * M_TO_KM), kWhite);
-    row("Z",  fmt("%+14.3f", r.z * M_TO_KM), kWhite);
+    row("X",  fmt("%+12.3f", r.x * M_TO_KM), kWhite);
+    row("Y",  fmt("%+12.3f", r.y * M_TO_KM), kWhite);
+    row("Z",  fmt("%+12.3f", r.z * M_TO_KM), kWhite);
 
-    header("ECI VELOCITY (m/s)");
-    row("Vx", fmt("%+14.3f", v.x), kWhite);
-    row("Vy", fmt("%+14.3f", v.y), kWhite);
-    row("Vz", fmt("%+14.3f", v.z), kWhite);
+    header("VELOCITY (m/s)");
+    row("Speed", fmt("%12.3f", v.norm()), kWhite);
 
-    header("ECI ACCELERATION (m/s^2)");
-    row("Ax", fmt("%+14.6f", a.x), kWhite);
-    row("Ay", fmt("%+14.6f", a.y), kWhite);
-    row("Az", fmt("%+14.6f", a.z), kWhite);
+    header("ACCELERATION (m/s^2)");
+    row("Accel", fmt("%12.6f", a.norm()), kWhite);
 
     header("ATTITUDE");
     row("Pitch",      fmt("%+8.2f deg", pitch),    kWhite);
