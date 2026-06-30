@@ -17,10 +17,8 @@ namespace sim {
         RocketState get_state() const { return snap.load(std::memory_order_acquire); }
 
     private:
-        void configure_rocket();
-        void publish_sim_states();
+        void publish_sim_states(const Rocket& r);
 
-        Rocket rocket;
         std::atomic<RocketState> snap{RocketState{}};
 
         double t = 0;

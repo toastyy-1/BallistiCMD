@@ -3,8 +3,49 @@
 #include <cmath>
 #include <iostream>
 
-Rocket::Rocket() {
-    // default constructor
+Rocket::Rocket(double origin_latitude, double origin_longitude, double target_latitude, double target_longitude) {
+    set_start(origin_latitude, origin_longitude, target_latitude, target_longitude);
+
+    // stage 1
+    props.stages[0] = {
+        .id = 1,
+        .m_dry = 4000.0,
+        .m_fuel = 117910.0,
+        .isp = 296.0,
+        .tip_to_end_length = 21.4,
+        .CoM_dist = 11.0,
+        .max_thrust = 2200000.0,
+        .engine_distance = 21.4,
+        .engine_gimball_range = 5.0
+    };
+
+    // stage 2
+    props.stages[1] = {
+        .id = 2,
+        .m_dry = 2800.0,
+        .m_fuel = 27200.0,
+        .isp = 316.0,
+        .tip_to_end_length = 9.4,
+        .CoM_dist = 4.7,
+        .max_thrust = 445000.0,
+        .engine_distance = 9.4,
+        .engine_gimball_range = 5.0
+    };
+
+    // payload
+    props.stages[2] = {
+        .id = 3,
+        .m_dry = 3700.0,
+        .m_fuel = 0.0,
+        .isp = 0.0,
+        .tip_to_end_length = 3.1,
+        .CoM_dist = 1.5,
+        .max_thrust = 0.0,
+        .engine_distance = 3.1,
+        .engine_gimball_range = 0.0
+    };
+
+    props.radius = 1.524;
 }
 
 Rocket::~Rocket() {
@@ -373,13 +414,6 @@ void Rocket::set_engine_orientation(Quat orientation) {
     double half_max = max_angle / 2.0;
     double s = std::sin(half_max) / sin_half;
     q_engine = {std::cos(half_max), orientation.x * s, orientation.y * s, orientation.z * s};
-}
-
-void Rocket::set_stage(int stage_num, const Stage& cfg) {
-    if (stage_num >= 1 && stage_num <= NUM_STAGES) {
-        props.stages[stage_num - 1] = cfg;
-        props.stages[stage_num - 1].id = stage_num;
-    }
 }
 
 static Vec3 lat_lon_to_eci(double latitude_deg, double longitude_deg) {

@@ -35,7 +35,7 @@ class Rocket {
     static constexpr int NUM_STAGES = ROCKET_NUM_STAGES; // stage_1, stage_2, payload
 
     // setup
-    Rocket();
+    Rocket(double origin_latitude, double origin_longitude, double target_latitude, double target_longitude);
     ~Rocket();
 
     // getters:
@@ -44,10 +44,7 @@ class Rocket {
     // setters (should only be used on setup)
     void set_pos(const Vec3& pos) { r = pos; } // set absolute position
     void set_orientation(const Quat& orient) { q_rocket = orient; } // set absolute orientation
-    void set_start(double origin_latitude, double origin_longitude, double target_latitude, double target_longitude); // used to set the starting and target position of the rocket (should use over over setting absolute position and orientation)
     void set_drag_coeff(double drag_coeff) { props.Cd = drag_coeff; }
-    void set_stage(int stage_num, const Stage& cfg);
-    void set_radius(double r) { props.radius = r; }
 
     // simulation things
     void update_dynamics();
@@ -106,6 +103,7 @@ class Rocket {
     const Stage& active() const { return props.stages[active_idx]; }
 
     // helper functions
+    void set_start(double origin_latitude, double origin_longitude, double target_latitude, double target_longitude); // sets the starting and target position/attitude (only called from the constructor
     double calculate_engine_thrust_component();
     double calculate_engine_rotational_component();
     Vec3 calc_drag_accel();

@@ -265,7 +265,7 @@ void FlightController::flight_controller_process(Rocket& r, double current_time)
         if (cs.time - countdown_start >= HOLD_DURATION) {
             cs.light_engine_flag = true;
             cs.stage_burn_time_start = cs.time;
-            cs.stage++;
+            cs.stage = STAGE_1;
         }
         
         cs.v = {0, 0, 0}; // do this because the integrator doesnt account for the normal force so it thinks the rocket moves when sitting on pad

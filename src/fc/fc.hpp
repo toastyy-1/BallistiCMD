@@ -30,17 +30,6 @@ enum MissionStage {
     PAYLOAD_DEPLOY = 2
 };
 
-inline MissionStage& operator++(MissionStage& s) {
-    s = static_cast<MissionStage>(static_cast<int>(s) + 1);
-    return s;
-}
-
-inline MissionStage operator++(MissionStage& s, int) {
-    MissionStage guh = s;
-    ++s;
-    return guh;
-}
-
 // holds the states of controls for the rocket
 struct ControlStates {
     MissionStage stage;

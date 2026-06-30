@@ -38,7 +38,7 @@ void FlightController::s1_powered() {
     if (cs.time - cs.stage_burn_time_start > cs.is.stage_burn_time[0] + 10) {
         cs.separate_stage_flag = true;
         cs.light_engine_flag = true;
-        cs.stage++;
+        cs.stage = STAGE_2;
     }
 }
 
