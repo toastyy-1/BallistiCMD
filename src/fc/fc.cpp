@@ -13,12 +13,15 @@
 #include "sim/rocket.hpp"
 
 Vec3 INS::read_INS_acc(const Rocket& r) {
-    Vec3 specific_force_eci = r.a - gravity_eci(r.r);
-    return add_noise(specific_force_eci, acc_stddev);
+    return add_noise(r.a - gravity_eci(r.r), acc_stddev);
 }
 
 Vec3 INS::read_INS_gyr(const Rocket& r) {
     return add_noise(r.w, gyr_stddev);
+}
+
+Vec3 INS::read_INS_grav(const Rocket& r) {
+    return gravity_eci(r.r);
 }
 
 
@@ -116,6 +119,8 @@ void FlightController::init(Rocket& r, double current_time) {
 // aquires new data from the sim
 void FlightController::pull_new_data(const Rocket& r, double current_time) {
     cs.a_inertial = ins.read_INS_acc(r);
+    cs.g = ins.read_INS_grav(r);
+    cs.a = cs.a_inertial + cs.g;
     cs.w = ins.read_INS_gyr(r);
     cs.dt = current_time - cs.time;
     cs.time = current_time; // this must happen after cs.dt or else cs.dt will be 0 :)
@@ -125,10 +130,7 @@ void FlightController::pull_new_data(const Rocket& r, double current_time) {
 void FlightController::estimate_state() {
     // position and velocity 
 
-    // determine true acceleration from gravity based on past position state
-    double r_norm = cs.r.norm();
-    Vec3 g = cs.r * (-1.0 * GM_EARTH / (r_norm * r_norm * r_norm));
-    cs.a = g + cs.a_inertial;
+    // acceleration is assumed to have been determined before this by reading from the INS
 
     // add delta v based on a to current v
     cs.v = cs.v + cs.a * cs.dt;
@@ -285,6 +287,13 @@ void FlightController::flight_controller_process(Rocket& r, double current_time)
     if (cs.separate_stage_flag) {
         cs.separate_stage_flag = false;
         r.advance_stage();
+    }
+
+    // check if the engine was supposed to be cut off (done before lighting so a cutoff this
+    // step wins and the motor stays locked out for the rest of the stage)
+    if (cs.cutoff_engine_flag) {
+        cs.cutoff_engine_flag = false;
+        r.cutoff_engine();
     }
 
     // check if engine was supposed to be lit

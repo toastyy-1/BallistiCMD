@@ -12,8 +12,9 @@ class INS {
     INS() : rng(94058) {}
 
     // reads sim states and adds noise
-    Vec3 read_INS_acc(const Rocket& r);
-    Vec3 read_INS_gyr(const Rocket& r);
+    Vec3 read_INS_acc(const Rocket& r); // inertial specific force
+    Vec3 read_INS_gyr(const Rocket& r); // angular velocity
+    Vec3 read_INS_grav(const Rocket& r); // gravity vector only
 
     private:
     std::mt19937 rng;

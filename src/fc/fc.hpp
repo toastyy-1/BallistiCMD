@@ -35,11 +35,12 @@ struct ControlStates {
     MissionStage stage;
 
     // states
-    Vec3 a_inertial; // specific force from the INS in ECI frame
-    Vec3 a;
+    Vec3 g; // gravity vector
+    Vec3 a_inertial; // inertial acceleration
+    Vec3 a; // g + a_inertial
     Vec3 v;
     Vec3 r;
-    Vec3 w;
+    Vec3 w; // angualr velocity
     Quat att; // attitude
     Quat target_att; // the current iterations target attitude
 
@@ -49,6 +50,7 @@ struct ControlStates {
 
     bool light_engine_flag = false; // set to true if you want to light the engine on that step
     bool separate_stage_flag = false; // set to true if you want to separate stage on that step
+    bool cutoff_engine_flag = false; // set to true if you want to permanently cut off the engine on that step
 
     // initial states
     FCInitState is;
@@ -61,6 +63,10 @@ class FlightController {
 
     // perform flight controller operations (should be called every time we want to update the FC)
     void flight_controller_process(Rocket& r, double current_time);
+
+    // command the active stage's motor to shut off permanently. thrust stops on the next FC step
+    // and the motor cannot be relit until the rocket stages away from it
+    void command_engine_cutoff() { cs.cutoff_engine_flag = true; }
 
     private:
     static constexpr double HOLD_DURATION = 40.0;

@@ -80,6 +80,7 @@ RocketState Rocket::get_state() const {
 bool Rocket::advance_stage() {
     if (active_idx + 1 < NUM_STAGES) {
         active_idx++;
+        engine_locked = false; // fresh stage
         return true;
     }
     return false;
@@ -89,9 +90,18 @@ bool Rocket::advance_stage() {
  * control lighting the engine on the current active stage
  */
 void Rocket::light_engine() {
+    if (engine_locked) return; // motor was cut off and cannot be relit on this stage
     if (active().m_fuel > 0) {
         active().thrust = active().max_thrust;
     }
+}
+
+/**
+ * permanently terminates thrust on the active stage, kills motor real dead
+ */
+void Rocket::cutoff_engine() {
+    active().thrust = 0;
+    engine_locked = true;
 }
 
 /**

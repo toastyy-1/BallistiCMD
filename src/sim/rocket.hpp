@@ -57,6 +57,7 @@ class Rocket {
 
     // used by flight controller
     void light_engine(); // should be used once per stage
+    void cutoff_engine();
     bool advance_stage();
     void set_engine_orientation(Quat orientation);
 
@@ -82,6 +83,7 @@ class Rocket {
     // dynamic state                                                                             //
     ///////////////////////////////////////////////////////////////////////////////////////////////
     int active_idx = 0;         // index of the currently active stage
+    bool engine_locked = false; // once cut off, the active stage's motor cannot be relit until staged away
 
     // mass properties
     double m_current = 0;       // current total mass (kg)
