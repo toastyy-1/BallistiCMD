@@ -1,5 +1,8 @@
 #include "fc.hpp"
-
+#include <iostream>
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// S1 GUIDANCE
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void FlightController::s1_powered() {
     static double s1_start_time = cs.time;
     double dt = cs.time - s1_start_time;
@@ -42,22 +45,141 @@ void FlightController::s1_powered() {
     }
 }
 
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// S2 GUIDANCE
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// stumpff functions helper
+static double Cz(double z) {
+    if (z >  1e-6) return (1.0 - cos(sqrt(z))) / z;
+    if (z < -1e-6) return (cosh(sqrt(-z)) - 1.0) / (-z);
+    return 0.5;
+}
+static double Sz(double z) {
+    if (z >  1e-6) { 
+        double s = sqrt(z);
+        return (s - sin(s)) / (s*s*s);
+    }
+    if (z < -1e-6) { 
+        double s = sqrt(-z);
+        return (sinh(s) - s) / (s*s*s);
+    }
+    return 1.0 / 6.0;
+}
+
+// lambert problem (determine velocity vector that reaches target in time tff given current position)
+static Vec3 lambert(Vec3 r, Vec3 r_t, double tff) {
+    double r_norm = r.norm();
+    double r_t_norm = r_t.norm();
+
+    // transfer angle
+    double d_theta = acos(r.dot(r_t) / (r_norm * r_t_norm));
+
+    // some constant
+    double A = sin(d_theta) * sqrt( (r_norm * r_t_norm) / (1 - cos(d_theta)) );
+
+    // helper for y(z) function in lambert
+    auto y_z = [&](double z) {
+        return r_norm + r_t_norm + A * (z * Sz(z) - 1.0) / sqrt(Cz(z));
+    };
+
+    // iterate z until the trajectory's time of flight is the same as the input time of flight
+    double z = 0.0; // initial number guess
+    while (y_z(z) < 0.0) z += 0.1; // bump up z until y(z) is good enough
+
+    // now iterate on z to find the best one using secant search
+    double z0 = 0.0;
+    double z1 = 0.1; // start with initial guesses that are kinda close to one another
+
+    for (int i = 0; i < 60; i++) {
+        // find F at z0
+        double y0 = y_z(z0);
+        double F0 = pow(y0 / Cz(z0), 1.5) * Sz(z0) + A * sqrt(y0) - sqrt(GM_EARTH) * tff;
+        
+        // find F at z1
+        double y1 = y_z(z1);
+        double F1 = pow(y1 / Cz(z1), 1.5) * Sz(z1) + A * sqrt(y1) - sqrt(GM_EARTH) * tff;
+        
+        // step
+        double z_next = z1 - F1 * (z1 - z0) / (F1 - F0);
+        
+        // check if it converges
+        if (fabs(z_next - z1) < 1e-8) {
+            z = z_next;
+            break;
+        }
+        
+        // shift values for next iteration
+        z0 = z1;
+        z1 = z_next;
+    }
+
+    // now we determine the lagrange multipliers as part of the analytical version of the lambert problem to find our required velocity vector
+    double y = y_z(z);
+    double f = 1 - y / r_norm;
+    double g = A * sqrt(y / GM_EARTH);
+
+    return (r_t - r * f) * (1 / g); // optimal taret velocity
+}
+
 void FlightController::s2_powered() {
-    // intial start of s2 period
-    static double s2_start = cs.time;
-    const double tof_total = 1500;
-    double dt = s2_start - cs.time;
-    double t_ff = tof_total - dt; // remaining time of free flight
+    static int counter = 3;
+    counter++;
 
+    static Vec3 v_req{}; // optimal required velocity
 
-    Vec3 r = cs.r; // current position
-    Vec3 v = cs.v; // current velocity
-    Vec3 r_t = cs.is.r_target; // target position
-    Vec3 g = cs.g;
+    ////////////////////////////////////////////////////////////
+    // determine the minimum rquired velocity
+    ////////////////////////////////////////////////////////////
+    if (counter >= 3) {
+        counter = 0; // reset counter
 
-    Vec3 v_req = ((r_t - r) / t_ff) - (g * t_ff * 0.5);
+        ////////////////////////////////////////////////////////////////////////////////////////
+        // use golden section search to find the optimal required velocity vector using lambert problem 
+        ////////////////////////////////////////////////////////////////////////////////////////
+        double rho = 1 / ( (1 + sqrt(5) ) / 2);
 
-    Vec3 v_gain = v_req - v;
+        double a = 300; // lower bound of guess
+        double b = 2700; // no reasonable flight should take longer than this right?
+        
+        // pick two points based on upper and lower bounds
+        double x1 = b - rho * (b - a);
+        double x2 = a + rho * (b - a);
 
+        // do the lambert problem on these two points
+        double f1 = lambert(cs.r, cs.is.r_target, x1).norm();
+        double f2 = lambert(cs.r, cs.is.r_target, x2).norm();
+
+        // iterate on a and b to find the minimum delta v point
+        while ((b - a) > 0.1) {
+            if (f1 < f2) {
+                b = x2;
+                x2 = x1;
+                f2 = f1;
+                x1 = b - rho * (b - a);
+                f1 = lambert(cs.r, cs.is.r_target, x1).norm();
+            }
+            else {
+                a = x1;
+                x1 = x2;
+                f1 = f2;
+                x2 = a + rho * (b - a);
+                f2 = lambert(cs.r, cs.is.r_target, x2).norm();
+            }
+        }
+
+        v_req = lambert(cs.r, cs.is.r_target, 0.5 * (a + b));
+    }
+
+    // velocity to be gained as a target
+    Vec3 v_gain = v_req - cs.v;
+
+    if (v_gain.norm() < 5.0) {
+        cs.cutoff_engine_flag = true;
+        //std::cout << "ENGINE_CUTOFF\n";
+    }
+
+    // set attitude to new target
     cs.target_att = quat_from_vec(v_gain.normalized());
+
 }

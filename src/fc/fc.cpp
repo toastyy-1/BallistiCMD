@@ -74,9 +74,6 @@ FCInitState FlightController::create_target_trajectory(double lat_target, double
         .z = sin(half_theta) * rot_axis_u.z
     };
 
-    // determine rocket dependent quantities and things
-    double delta_v_first_stage = props.stages[0].isp * g0 * log((props.stages[0].m_dry + props.stages[0].m_fuel) / props.stages[0].m_dry ); // rocket equation yay
-
     // launch azimuth
     double delta_long = long_target - long_origin;
     double launch_azimuth = atan2(

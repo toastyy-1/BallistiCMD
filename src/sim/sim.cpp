@@ -16,7 +16,7 @@ namespace sim {
     Sim::~Sim() {}
 
     void Sim::Run() {
-        Rocket rocket{35.948416, -83.936084, 55.753331, 37.616062};
+        Rocket rocket{35.948416, -83.936084, 35.020136, 33.150308};
 
         // configure the rocket for starting settings
         publish_sim_states(rocket);
@@ -45,7 +45,7 @@ namespace sim {
             // make snapshot for other threads of sim states
             publish_sim_states(rocket);
 
-            std::this_thread::sleep_for(std::chrono::duration<double>(0.02));
+            std::this_thread::sleep_for(std::chrono::duration<double>(0.01));
         }
     }
 

@@ -208,7 +208,7 @@ Vec3 Rocket::calc_drag_accel() {
     double craft_speed = v_relative.norm();
 
     // calcualte the aoa entering into the atmosphere
-    Vec3 nose_direction = nose_direction_eci();
+    //Vec3 nose_direction = nose_direction_eci();
     //double AoA = std::acos(std::max(-1.0, std::min(1.0, v_relative.dot(nose_direction) / craft_speed)));
     //std::cout << AoA * RAD_TO_DEG << std::endl;
 
