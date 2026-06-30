@@ -177,6 +177,7 @@ void FlightController::s2_powered() {
     if (v_gain.norm() < 5.0) {
         cs.cutoff_engine_flag = true;
         //std::cout << "ENGINE_CUTOFF\n";
+        return;
     }
 
     // set attitude to new target
