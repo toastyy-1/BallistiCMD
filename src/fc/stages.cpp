@@ -146,9 +146,9 @@ void FlightController::s2_powered() {
         double x1 = b - rho * (b - a);
         double x2 = a + rho * (b - a);
 
-        // do the lambert problem on these two points
-        double f1 = lambert(cs.r, cs.is.r_target, x1).norm();
-        double f2 = lambert(cs.r, cs.is.r_target, x2).norm();
+        // do the lambert problem on these two points (smallest change in velocity)
+        double f1 = (lambert(cs.r, cs.is.r_target, x1) - cs.v).norm();
+        double f2 = (lambert(cs.r, cs.is.r_target, x2) - cs.v).norm();
 
         // iterate on a and b to find the minimum delta v point
         while ((b - a) > 0.1) {
@@ -157,14 +157,14 @@ void FlightController::s2_powered() {
                 x2 = x1;
                 f2 = f1;
                 x1 = b - rho * (b - a);
-                f1 = lambert(cs.r, cs.is.r_target, x1).norm();
+                f1 = (lambert(cs.r, cs.is.r_target, x1) - cs.v).norm();
             }
             else {
                 a = x1;
                 x1 = x2;
                 f1 = f2;
                 x2 = a + rho * (b - a);
-                f2 = lambert(cs.r, cs.is.r_target, x2).norm();
+                f2 = (lambert(cs.r, cs.is.r_target, x2) - cs.v).norm();
             }
         }
 
@@ -174,13 +174,104 @@ void FlightController::s2_powered() {
     // velocity to be gained as a target
     Vec3 v_gain = v_req - cs.v;
 
-    if (v_gain.norm() < 5.0) {
+    // stop the engine if the V is within proper cutoff range
+    // the cutoff should be tied to the max possible delta V of the 3rd stage engine
+    double next_delta_v = props.stages[2].isp * g0 * log((props.stages[2].m_dry + props.stages[2].m_fuel) / props.stages[2].m_dry);
+    if (v_gain.norm() < next_delta_v - 0.3 * next_delta_v) { // within 30% for margin of error
+        // stop engine to stop overshoot
         cs.cutoff_engine_flag = true;
-        //std::cout << "ENGINE_CUTOFF\n";
+        std::cout << "ENGINE_CUTOFF at " << v_gain.norm() << "m/s " << "with next stage having delta v: " << next_delta_v << "m/s\n";
+        
+        // switch stage
+        cs.stage = PAYLOAD_DEPLOY;
+
+        // set stage separation
+        cs.separate_stage_flag = true;
+
         return;
     }
 
     // set attitude to new target
     cs.target_att = quat_from_vec(v_gain.normalized());
 
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// S3 GUIDANCE
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// simply operates a modified version of stage 2 that improves trajectory accuracy with small engine
+void FlightController::payload_deploy() {
+    // initially, set rcs flag to true so we can orient rocket in right direction
+    cs.rcs_activated_flag = true;
+
+    ////////////////////////////////////////////////////////////////////////////////////////
+    // calculate error in direction to know when its safe to light engine (otherwise use RCS)
+    ////////////////////////////////////////////////////////////////////////////////////////
+    Quat target = cs.target_att;
+    Quat current = cs.att;
+
+    // calculate error between the two quaternions
+    Quat q_err = current.inverse() * target;
+    if (q_err.w < 0) q_err = {-q_err.w, -q_err.x, -q_err.y, -q_err.z};
+
+    // for small angles the vector part of the error quaternion is proportional
+    // to the rotational error about body axis. n is the roll, pitch, yaw error in radians
+    Vec3 n = { .x = 2 * q_err.x, .y = 2 * q_err.y, .z = 2 * q_err.z };
+
+    // burn is ready once the attitude error has gotten low enough so engins is not lit while the rocket is still wobbling around
+    constexpr double attitude_tolerance = 0.5 * DEG_TO_RAD; // rad
+    bool burn_ready = n.norm() < attitude_tolerance;
+    if (burn_ready) { cs.light_engine_flag = true; }
+
+    ////////////////////////////////////////////////////////////////////////////////////////
+    // use golden section search to find the optimal required velocity vector using lambert problem 
+    ////////////////////////////////////////////////////////////////////////////////////////
+    static Vec3 v_req{}; // optimal required velocity
+
+    double rho = 1 / ( (1 + sqrt(5) ) / 2);
+
+    double a = 300; // lower bound of guess
+    double b = 2700; // no reasonable flight should take longer than this right?
+    
+    // pick two points based on upper and lower bounds
+    double x1 = b - rho * (b - a);
+    double x2 = a + rho * (b - a);
+
+    // do the lambert problem on these two points
+    double f1 = (lambert(cs.r, cs.is.r_target, x1) - cs.v).norm();
+    double f2 = (lambert(cs.r, cs.is.r_target, x2) - cs.v).norm();
+
+    // iterate on a and b to find the minimum delta v point
+    while ((b - a) > 0.1) {
+        if (f1 < f2) {
+            b = x2;
+            x2 = x1;
+            f2 = f1;
+            x1 = b - rho * (b - a);
+            f1 = (lambert(cs.r, cs.is.r_target, x1) - cs.v).norm();
+        }
+        else {
+            a = x1;
+            x1 = x2;
+            f1 = f2;
+            x2 = a + rho * (b - a);
+            f2 = (lambert(cs.r, cs.is.r_target, x2) - cs.v).norm();
+        }
+    }
+
+    v_req = lambert(cs.r, cs.is.r_target, 0.5 * (a + b));
+
+    // velocity to be gained as a target
+    Vec3 v_gain = v_req - cs.v;
+
+    // stop the engine if the V is within proper cutoff range
+    if (v_gain.norm() < 1.0) {
+        // stop engine to stop overshoot
+        cs.cutoff_engine_flag = true;
+        std::cout << "ENGINE_CUTOFF\n";
+        return;
+    }
+
+    // set attitude to new target
+    cs.target_att = quat_from_vec(v_gain.normalized());
 }

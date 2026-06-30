@@ -48,6 +48,7 @@ struct ControlStates {
     double time;
     double stage_burn_time_start; // mission time the current stage's engine was lit
 
+    bool rcs_activated_flag = false; // set to true if you want the RCS system to try and point the rocket to target_att
     bool light_engine_flag = false; // set to true if you want to light the engine on that step
     bool separate_stage_flag = false; // set to true if you want to separate stage on that step
     bool cutoff_engine_flag = false; // set to true if you want to permanently cut off the engine on that step
@@ -63,10 +64,6 @@ class FlightController {
 
     // perform flight controller operations (should be called every time we want to update the FC)
     void flight_controller_process(Rocket& r, double current_time);
-
-    // command the active stage's motor to shut off permanently. thrust stops on the next FC step
-    // and the motor cannot be relit until the rocket stages away from it
-    void command_engine_cutoff() { cs.cutoff_engine_flag = true; }
 
     private:
     static constexpr double HOLD_DURATION = 40.0;
@@ -85,9 +82,12 @@ class FlightController {
     void pull_new_data(const Rocket& r, double current_time);
     Quat quat_from_vec(Vec3 u);
     Quat set_new_engine_gimbal_quat();
+    Vec3 calculate_rcs_moments_to_achieve_target_orientation(); // longest function name ever lets go
+    void command_engine_cutoff() { cs.cutoff_engine_flag = true; }
 
     // stages
     void s1_powered();
     void s2_powered();
+    void payload_deploy();
 
 };

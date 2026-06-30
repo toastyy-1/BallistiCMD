@@ -89,6 +89,9 @@ FCInitState FlightController::create_target_trajectory(double lat_target, double
     // stage 2 burn time
     out.stage_burn_time[1] = props.stages[1].m_fuel / props.stages[1].max_mass_flow_rate();
 
+    // stage 3 burn time
+    out.stage_burn_time[2] = props.stages[2].m_fuel / props.stages[2].max_mass_flow_rate();
+
     // return all our calculated stuff yay!
     return out;
 }
@@ -233,6 +236,35 @@ Quat FlightController::set_new_engine_gimbal_quat() {
     return (q_pitch * q_yaw).normalize();
 }
 
+// figures out what moment needs to be applied by the RCS system to achieve the target orientation 
+Vec3 FlightController::calculate_rcs_moments_to_achieve_target_orientation() {
+    Quat target = cs.target_att;
+    Quat current = cs.att;
+
+    // calculate error between the two quaternions
+    Quat q_err = current.inverse() * target;
+    if (q_err.w < 0) q_err = {-q_err.w, -q_err.x, -q_err.y, -q_err.z};
+
+    // for small angles the vector part of the error quaternion is proportional 
+    // to the rotational error about body axis. n is the roll, pitch, yaw error in radians
+    Vec3 n = { .x = 2 * q_err.x, .y = 2 * q_err.y, .z = 2 * q_err.z };
+
+    // calculate moments about payload (assume solid cone)
+    Stage s = props.stages[cs.stage];
+    double R2 = props.radius * props.radius;
+    Vec3 I = {
+        .x = 0.15 * s.m_dry * R2 + 0.0375 * s.m_dry * pow(s.tip_to_end_length, 2),
+        .y = 0.15 * s.m_dry * R2 + 0.0375 * s.m_dry * pow(s.tip_to_end_length, 2),
+        .z = 0.3 * s.m_dry * R2
+    };
+    double w_nat = 0.15; // random placeholder
+    Vec3 K_p = I * w_nat * w_nat;
+    Vec3 K_d = I * 0.7 * w_nat;
+    Vec3 tau_req = n.vector_individual_multiply(K_p) - cs.w.vector_individual_multiply(K_d);
+    std::cout << "PD applying moment of " << tau_req.x << ", " << tau_req.y << ", " << tau_req.z << " n-m\n";
+    return { tau_req.x, tau_req.y, tau_req.z };
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////
 // flight controller loop                                                                    //
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -277,20 +309,20 @@ void FlightController::flight_controller_process(Rocket& r, double current_time)
         s2_powered();
         break;
     case PAYLOAD_DEPLOY:
+        payload_deploy();
         break;
     }
 
-    // check if the stage was supposed to be separated
-    if (cs.separate_stage_flag) {
-        cs.separate_stage_flag = false;
-        r.advance_stage();
-    }
-
-    // check if the engine was supposed to be cut off (done before lighting so a cutoff this
-    // step wins and the motor stays locked out for the rest of the stage)
+    // check if the engine was supposed to be cut off
     if (cs.cutoff_engine_flag) {
         cs.cutoff_engine_flag = false;
         r.cutoff_engine();
+    }
+
+    // check if the stage was supposed to be separated (clears the engine lock for the fresh stage)
+    if (cs.separate_stage_flag) {
+        cs.separate_stage_flag = false;
+        r.advance_stage();
     }
 
     // check if engine was supposed to be lit
@@ -301,4 +333,13 @@ void FlightController::flight_controller_process(Rocket& r, double current_time)
 
     // send targeting commands to the engine gimbal system based on target attitude in cs
     r.set_engine_orientation(set_new_engine_gimbal_quat());
+
+    // send orientation change commands to the rcs thruster system if it is active
+    if (cs.rcs_activated_flag) {
+        r.rcs_on();
+        r.rcs_apply_const_moment(calculate_rcs_moments_to_achieve_target_orientation());
+    }
+    else {
+        r.rcs_off();
+    }
 }

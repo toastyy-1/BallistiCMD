@@ -17,6 +17,7 @@ struct Stage {
     double thrust;                  // current commanded thrust
     double engine_distance;         // distance of engine from leading edge
     double engine_gimball_range;    // rad
+    Vec3 rcs_max_capable_moment;    // n-m torque that RCS system for that stage can apply about axes along CoM (set 0 if no rcs)
 
     double exhaust_velocity() const { return isp * g0; }
     double mass_flow_rate() const { return isp > 0 ? thrust / exhaust_velocity() : 0.0; }

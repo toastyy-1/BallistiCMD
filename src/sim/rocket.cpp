@@ -1,5 +1,6 @@
 #include "rocket.hpp"
 #include "constants.hpp"
+#include <algorithm>
 #include <cmath>
 #include <iostream>
 
@@ -36,13 +37,14 @@ Rocket::Rocket(double origin_latitude, double origin_longitude, double target_la
     props.stages[2] = {
         .id = 3,
         .m_dry = 3700.0,
-        .m_fuel = 0.0,
-        .isp = 0.0,
+        .m_fuel = 200.0,
+        .isp = 285.0,
         .tip_to_end_length = 3.1,
         .CoM_dist = 1.5,
-        .max_thrust = 0.0,
+        .max_thrust = 7400,
         .engine_distance = 3.1,
-        .engine_gimball_range = 0.0
+        .engine_gimball_range = 0.0,
+        .rcs_max_capable_moment = { 100.0, 100.0, 100.0 }
     };
 
     props.radius = 1.524;
@@ -102,6 +104,19 @@ void Rocket::light_engine() {
 void Rocket::cutoff_engine() {
     active().thrust = 0;
     engine_locked = true;
+}
+
+/**
+ * tells the RCS system that it should apply a moment to the center of mass of the rocket body according to the input
+ * if the applied moment is greater than possible by the RCS system it will just max out the moments
+ */
+void Rocket::rcs_apply_const_moment(Vec3 m) {
+    Vec3 applied_moment = m;
+    // cap moments
+    applied_moment.x = std::clamp(m.x, -active().rcs_max_capable_moment.x, active().rcs_max_capable_moment.x);
+    applied_moment.y = std::clamp(m.y, -active().rcs_max_capable_moment.y, active().rcs_max_capable_moment.y);
+    applied_moment.z = std::clamp(m.z, -active().rcs_max_capable_moment.z, active().rcs_max_capable_moment.z);
+    applied_rcs_moment = applied_moment; // apply moment to apply_rcs_moment
 }
 
 /**
@@ -325,12 +340,13 @@ void Rocket::update_rotation() {
 
     // torque in body frame
     net_torque += r_engine.cross(thrust_dir_body * active().thrust);
+    if (rcs_active) net_torque += applied_rcs_moment;
 
 
     ////////////////////////////////////
     // apply torque to orientation
     ////////////////////////////////////
-    Vec3 Iw   = {I_body.x * w.x, I_body.y * w.y, I_body.z * w.z};
+    Vec3 Iw = {I_body.x * w.x, I_body.y * w.y, I_body.z * w.z};
     Vec3 gyro = w.cross(Iw);
     Vec3 ang_a = {
         (net_torque.x - gyro.x) / I_body.x,

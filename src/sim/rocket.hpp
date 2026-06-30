@@ -60,6 +60,9 @@ class Rocket {
     void cutoff_engine();
     bool advance_stage();
     void set_engine_orientation(Quat orientation);
+    void rcs_on() { rcs_active = true; } // enable or disable rcs orientation correction
+    void rcs_off() { rcs_active = false; }
+    void rcs_apply_const_moment(Vec3 moment); // applies moment until changed
 
 
     ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -88,8 +91,12 @@ class Rocket {
     // mass properties
     double m_current = 0;       // current total mass (kg)
     double m_fuel_current = 0;  // current total fuel mass (kg)
-    Vec3 I_body = {0, 0, 0};    // moments of inertia about the combined CM, body frame
-    double z_cm = 0;            // combined CM along body +z, from the active stage's aft edge (m)
+    Vec3 I_body = {0, 0, 0};    // moments of inertia about the combined CoM, body frame
+    double z_cm = 0;            // combined CoM along body +z, from the active stage's aft edge (m)
+
+    // rcs system
+    bool rcs_active = false;
+    Vec3 applied_rcs_moment = {0, 0, 0}; // the moment that is applied to the body in addition to other forces due to RCS
 
     // kinematic state
     Vec3 r = {0, 0, 0};             // position (m)
