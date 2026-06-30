@@ -261,7 +261,7 @@ Vec3 FlightController::calculate_rcs_moments_to_achieve_target_orientation() {
     Vec3 K_p = I * w_nat * w_nat;
     Vec3 K_d = I * 0.7 * w_nat;
     Vec3 tau_req = n.vector_individual_multiply(K_p) - cs.w.vector_individual_multiply(K_d);
-    std::cout << "PD applying moment of " << tau_req.x << ", " << tau_req.y << ", " << tau_req.z << " n-m\n";
+    //std::cout << "PD applying moment of " << tau_req.x << ", " << tau_req.y << ", " << tau_req.z << " n-m\n";
     return { tau_req.x, tau_req.y, tau_req.z };
 }
 

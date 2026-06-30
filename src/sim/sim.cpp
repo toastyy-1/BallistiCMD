@@ -16,7 +16,7 @@ namespace sim {
     Sim::~Sim() {}
 
     void Sim::Run() {
-        Rocket rocket{35.948416, -83.936084, 35.020136, 33.150308};
+        Rocket rocket{35.948416, -83.936084, 51.501148, -0.142379};
 
         // configure the rocket for starting settings
         publish_sim_states(rocket);

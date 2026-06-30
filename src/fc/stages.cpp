@@ -269,6 +269,7 @@ void FlightController::payload_deploy() {
         // stop engine to stop overshoot
         cs.cutoff_engine_flag = true;
         std::cout << "ENGINE_CUTOFF\n";
+        cs.rcs_activated_flag = false;
         return;
     }
 
