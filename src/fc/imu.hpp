@@ -40,6 +40,17 @@ class INS {
     static Vec3 gravity_eci(Vec3 r) {
         double rn = r.norm();
         if (rn < 1.0) return {0.0, 0.0, 0.0};
-        return r * (-GM_EARTH / (rn * rn * rn));
+
+        double rn_sq = rn * rn;
+        double term = GM_EARTH / (rn_sq * rn);
+
+        double zr2 = (r.z * r.z) / rn_sq;
+        double j2_factor = 1.5 * J2 * (EARTH_RADIUS * EARTH_RADIUS) / rn_sq;
+
+        return {
+            -term * r.x * (1.0 + j2_factor * (1.0 - 5.0 * zr2)),
+            -term * r.y * (1.0 + j2_factor * (1.0 - 5.0 * zr2)),
+            -term * r.z * (1.0 + j2_factor * (3.0 - 5.0 * zr2))
+        };
     }
 };
