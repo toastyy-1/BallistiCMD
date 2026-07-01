@@ -43,6 +43,7 @@ struct ControlStates {
     Vec3 w; // angualr velocity
     Quat att; // attitude
     Quat target_att; // the current iterations target attitude
+    Vec3 I; // current moment of inertia
 
     double dt; // time from last time measurement
     double time;
@@ -83,6 +84,7 @@ class FlightController {
     Quat quat_from_vec(Vec3 u);
     Quat set_new_engine_gimbal_quat();
     Vec3 calculate_rcs_moments_to_achieve_target_orientation(); // longest function name ever lets go
+    void calculate_I();
     void command_engine_cutoff() { cs.cutoff_engine_flag = true; }
 
     // stages

@@ -189,9 +189,11 @@ Quat FlightController::set_new_engine_gimbal_quat() {
     Vec3 n = { .x = 2 * q_err.x, .y = 2 * q_err.y, .z = 2 * q_err.z };
 
     // calculate required torque using PD
-    double K_p = 0.5;
-    double K_d = 0.5;
-    Vec3 tau_req = (n * K_p) - (cs.w * K_d);
+    double wn = 0.15;
+    double zeta = 0.7;
+    Vec3 K_p = cs.I * (wn * wn);
+    Vec3 K_d = cs.I * (2.0 * zeta * wn);
+    Vec3 tau_req = n.vector_individual_multiply(K_p) - cs.w.vector_individual_multiply(K_d);
 
     // map torque to gimball command angles
 
@@ -215,20 +217,9 @@ Quat FlightController::set_new_engine_gimbal_quat() {
     // moment arm from the engine gimbal point to the rocket CoM
     double moment_arm = z_cm - s_engine;
 
-    double R2 = props.radius * props.radius;
-    double I = 0.0;
-    base = 0.0;
-    for (int i = cs.stage; i < ROCKET_NUM_STAGES; i++) {
-        const Stage& st = props.stages[i];
-        double m = st.m_dry + st.m_fuel, L = st.tip_to_end_length;
-        double d = (base + L - st.CoM_dist) - z_cm;
-        I += (1.0 / 12.0) * m * (3.0 * R2 + L * L) + m * d * d;
-        base += L;
-    }
-
-    // calculate required pitch and yaw for engine
-    double pitch = -I * tau_req.x / (s.max_thrust * moment_arm);
-    double yaw = -I * tau_req.y / (s.max_thrust * moment_arm);
+    // required pitch and yaw
+    double pitch = -tau_req.x / (s.max_thrust * moment_arm);
+    double yaw = -tau_req.y / (s.max_thrust * moment_arm);
 
     // determine nozzzle deflection from body in quaternion orientation from pitch and yaw commands
     Quat q_pitch = { cos(pitch / 2), sin(pitch / 2), 0.0, 0.0 };
@@ -249,20 +240,51 @@ Vec3 FlightController::calculate_rcs_moments_to_achieve_target_orientation() {
     // to the rotational error about body axis. n is the roll, pitch, yaw error in radians
     Vec3 n = { .x = 2 * q_err.x, .y = 2 * q_err.y, .z = 2 * q_err.z };
 
-    // calculate moments about payload (assume solid cone)
-    Stage s = props.stages[cs.stage];
-    double R2 = props.radius * props.radius;
-    Vec3 I = {
-        .x = 0.15 * s.m_dry * R2 + 0.0375 * s.m_dry * pow(s.tip_to_end_length, 2),
-        .y = 0.15 * s.m_dry * R2 + 0.0375 * s.m_dry * pow(s.tip_to_end_length, 2),
-        .z = 0.3 * s.m_dry * R2
-    };
-    double w_nat = 0.15; // random placeholder
-    Vec3 K_p = I * w_nat * w_nat;
-    Vec3 K_d = I * 0.7 * w_nat;
+    // do PD for required orientation
+    Vec3 I = cs.I;
+    double wn = 0.15; // random placeholder
+    double zeta = 0.7;
+    Vec3 K_p = I * (wn * wn);
+    Vec3 K_d = I * zeta * wn;
     Vec3 tau_req = n.vector_individual_multiply(K_p) - cs.w.vector_individual_multiply(K_d);
     //std::cout << "PD applying moment of " << tau_req.x << ", " << tau_req.y << ", " << tau_req.z << " n-m\n";
     return { tau_req.x, tau_req.y, tau_req.z };
+}
+
+// integrates things to give a decent estimate of what the current moment of inertia of the rocket is
+void FlightController::calculate_I() {
+    Vec3 I = {0};
+    double R2 = props.radius * props.radius;
+
+    // mass-weighted center of mass of the remaining stages
+    double M_total = 0.0, m_CoM = 0.0, base = 0.0;
+    for (int i = cs.stage; i < ROCKET_NUM_STAGES; i++) {
+        const Stage& st = props.stages[i];
+        double m = st.m_dry + st.m_fuel;
+        M_total += m;
+        m_CoM += m * (base + st.tip_to_end_length - st.CoM_dist);
+        base += st.tip_to_end_length;
+    }
+    double z_cm = m_CoM / M_total;
+
+    base = 0.0;
+    for (int i = cs.stage; i < ROCKET_NUM_STAGES; i++) {
+        const Stage& s = props.stages[i]; // selected stage
+        double M = s.m_dry + s.m_fuel;
+        double L = s.tip_to_end_length;
+
+        // about z axis
+        I.z += 0.5 * M * R2;
+
+        // about x and y axes parallel axis theorem from each stage centroid to z_cm
+        double d = (base + L - s.CoM_dist) - z_cm;
+        double Ixy = M * (L * L / 12.0 + R2 / 4) + M * d * d;
+        I.x += Ixy;
+        I.y += Ixy;
+
+        base += L;
+    }
+    cs.I = I;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -287,6 +309,9 @@ void FlightController::flight_controller_process(Rocket& r, double current_time)
 
     // estimate state based on pulled data
     estimate_state();
+
+    // estimate current moment of inertia
+    calculate_I();
 
     // manages setting a target attitude for the engine gimballing stuff depending on what the stage is
     switch (cs.stage) {
