@@ -407,6 +407,7 @@ void Renderer::DrawTelemetry() const {
     row("X",  fmt("%+12.3f", r.x * M_TO_KM), kWhite);
     row("Y",  fmt("%+12.3f", r.y * M_TO_KM), kWhite);
     row("Z",  fmt("%+12.3f", r.z * M_TO_KM), kWhite);
+    row("ALT", fmt("%+12.3f", (r.norm() - EARTH_RADIUS) * M_TO_KM), kWhite);
 
     header("VELOCITY (m/s)");
     row("Speed", fmt("%12.3f", v.norm()), kWhite);

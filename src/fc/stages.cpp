@@ -11,7 +11,7 @@ void FlightController::s1_powered() {
     // do initial turn towards target before gravity turn starts
     ///////////////////////////////////////////////////////////////////////////
     constexpr double init_turn_len = 20.0; // seconds
-    constexpr double init_tilt_angle = 5.0 * DEG_TO_RAD;
+    constexpr double init_tilt_angle = 50.0 * DEG_TO_RAD;
 
     if (dt < init_turn_len) {
         Vec3 up = cs.r.normalized();
@@ -38,7 +38,7 @@ void FlightController::s1_powered() {
     ///////////////////////////////////////////////////////////////////////////
     // separate once the stage has burned out
     ///////////////////////////////////////////////////////////////////////////
-    if (cs.time - cs.stage_burn_time_start > cs.is.stage_burn_time[0] + 10) {
+    if (cs.time - cs.stage_burn_time_start > cs.is.stage_burn_time[0] + 1) {
         cs.separate_stage_flag = true;
         cs.light_engine_flag = true;
         cs.stage = STAGE_2;
@@ -125,6 +125,8 @@ static Vec3 lambert(Vec3 r, Vec3 r_t, double tff) {
 void FlightController::s2_powered() {
     static int counter = 3;
     counter++;
+    static double burn_start_t = cs.time;
+    double burn_time = cs.time - burn_start_t;
 
     static Vec3 v_req{}; // optimal required velocity
 
@@ -174,10 +176,11 @@ void FlightController::s2_powered() {
     // velocity to be gained as a target
     Vec3 v_gain = v_req - cs.v;
 
-    // stop the engine if the V is within proper cutoff range
+    // stop the engine if the V is within proper cutoff range OR if the fuel is out
     // the cutoff should be tied to the max possible delta V of the 3rd stage engine
     double next_delta_v = props.stages[2].isp * g0 * log((props.stages[2].m_dry + props.stages[2].m_fuel) / props.stages[2].m_dry);
-    if (v_gain.norm() < next_delta_v - 0.3 * next_delta_v) { // within 30% for margin of error
+    double estimated_s2_burn_time = props.stages[1].m_fuel / (props.stages[1].max_mass_flow_rate());
+    if (v_gain.norm() < next_delta_v - 0.3 * next_delta_v || burn_time > estimated_s2_burn_time) { // within 30% for margin of error, or motor depleted
         // stop engine to stop overshoot
         cs.cutoff_engine_flag = true;
         std::cout << "ENGINE_CUTOFF at " << v_gain.norm() << "m/s " << "with next stage having delta v: " << next_delta_v << "m/s\n";

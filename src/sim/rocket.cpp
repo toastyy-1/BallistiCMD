@@ -7,47 +7,49 @@
 Rocket::Rocket(double origin_latitude, double origin_longitude, double target_latitude, double target_longitude) {
     set_start(origin_latitude, origin_longitude, target_latitude, target_longitude);
 
+    // Minuteman III (LGM-30G)
+
     // stage 1
     props.stages[0] = {
         .id = 1,
-        .m_dry = 4000.0,
-        .m_fuel = 117910.0,
-        .isp = 296.0,
-        .tip_to_end_length = 21.4,
-        .CoM_dist = 11.0,
-        .max_thrust = 2200000.0,
-        .engine_distance = 21.4,
+        .m_dry = 2292.0,
+        .m_fuel = 20938.0,
+        .isp = 267.0,
+        .tip_to_end_length = 7.49,
+        .CoM_dist = 3.75,
+        .max_thrust = 903692.0,
+        .engine_distance = 7.49,
         .engine_gimball_range = 5.0
     };
 
-    // stage 2
+    // stage 2 - ATK SR-19 solid motor
     props.stages[1] = {
         .id = 2,
-        .m_dry = 2800.0,
-        .m_fuel = 27200.0,
-        .isp = 316.0,
-        .tip_to_end_length = 9.4,
-        .CoM_dist = 4.7,
-        .max_thrust = 445000.0,
-        .engine_distance = 9.4,
+        .m_dry = 795.0,
+        .m_fuel = 6237.0,
+        .isp = 288.0,
+        .tip_to_end_length = 4.12,
+        .CoM_dist = 2.06,
+        .max_thrust = 270421.0,
+        .engine_distance = 4.12,
         .engine_gimball_range = 5.0
     };
 
-    // payload
+    // stage 3
     props.stages[2] = {
         .id = 3,
-        .m_dry = 3700.0,
-        .m_fuel = 200.0,
+        .m_dry = 1500.0,
+        .m_fuel = 3306.0,
         .isp = 285.0,
-        .tip_to_end_length = 3.1,
-        .CoM_dist = 1.5,
-        .max_thrust = 7400,
-        .engine_distance = 3.1,
-        .engine_gimball_range = 0.0,
+        .tip_to_end_length = 6.59,
+        .CoM_dist = 3.3,
+        .max_thrust = 156070.0,
+        .engine_distance = 6.59,
+        .engine_gimball_range = 4.0,
         .rcs_max_capable_moment = { 100.0, 100.0, 100.0 }
     };
 
-    props.radius = 1.524;
+    props.radius = 0.835;
 }
 
 Rocket::~Rocket() {
