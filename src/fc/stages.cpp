@@ -268,7 +268,7 @@ void FlightController::payload_deploy() {
     Vec3 v_gain = v_req - cs.v;
 
     // stop the engine if the V is within proper cutoff range
-    if (v_gain.norm() < 1.0) {
+    if (v_gain.norm() < 5.0) {
         // stop engine to stop overshoot
         cs.cutoff_engine_flag = true;
         std::cout << "ENGINE_CUTOFF\n";
