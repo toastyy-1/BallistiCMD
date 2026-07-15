@@ -16,10 +16,16 @@ namespace sim {
     Sim::~Sim() {}
 
     void Sim::Run() {
-        Rocket rocket{35.948416, -83.936084, 81.093395, -63.211146};
+        std::vector<Rocket> rocket_list = {};
+
+        Rocket r1{35.948416, -83.936084, 81.093395, -63.211146};
+        Rocket r2{-35.948416, -83.936084, 81.093395, -63.211146};
+
+        rocket_list.push_back(r1);
+        rocket_list.push_back(r2);
 
         // configure the rocket for starting settings
-        publish_sim_states(rocket);
+        publish_sim_states(rocket_list);
 
         while (running.load()) {
 
@@ -31,28 +37,39 @@ namespace sim {
                 !!! NOTE !!! THE ROCKET SHOULD NOT BE CONTROLLED FROM HERE AT ALL ASSUMING THE FC IS ACTIVE
             */
 
-            // lets the flight controller process data to send commands to the rocket
-            rocket.update_flight_controller(t);
+            // for each rocket, perform sim calculations individually for each one through the list until every one is updated independently of one another
+            for (size_t i = 0; i < rocket_list.size(); i++) {
+                // lets the flight controller process data to send commands to the rocket
+                rocket_list[i].update_flight_controller(t);
 
-            // update the position, orientation, and mass of the rocket
-            rocket.update_mass();
-            rocket.update_dynamics();
-            rocket.update_rotation();
+                // update the position, orientation, and mass of the rocket
+                rocket_list[i].update_mass();
+                rocket_list[i].update_dynamics();
+                rocket_list[i].update_rotation();
+            }
 
             // increment time step
             t += TIME_STEP;
 
             // make snapshot for other threads of sim states
-            publish_sim_states(rocket);
+            publish_sim_states(rocket_list);
 
             std::this_thread::sleep_for(std::chrono::duration<double>(0.01));
         }
     }
 
-    void Sim::publish_sim_states(const Rocket& r) {
-        RocketState s = r.get_state();
-        s.t = t;
-        snap.store(s, std::memory_order_release);
+    void Sim::publish_sim_states(const std::vector<Rocket>& rocket_list) {
+        std::vector<RocketState> states;
+        states.reserve(rocket_list.size());
+
+        for (size_t i = 0; i < rocket_list.size(); i++) {
+            RocketState s = rocket_list[i].get_state();
+            s.t = t;
+            states.push_back(s);
+        }
+
+        std::lock_guard<std::mutex> lk(rocket_states_mutex);
+        rocket_states = std::move(states);
     }
 
 
