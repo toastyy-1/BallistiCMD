@@ -41,11 +41,102 @@
 #define STB_EASY_FONT_IMPLEMENTATION
 #include "stb_easy_font.h"
 
+#define STB_TRUETYPE_IMPLEMENTATION
+#define STB_TRUETYPE_STATIC   // internal linkage: avoid clashing with bgfx/bimg's stb
+#include <stb/stb_truetype.h>
+
 namespace renderer {
 
 namespace {
 
 bx::DefaultAllocator s_allocator;
+
+// --- Greek-capable glyph atlas (stb_truetype) -------------------------------
+// Baked once from the bundled TTF into a single bgfx texture. Covers ASCII
+// printable + the Greek block so rocket IDs like "α3" render. If the font is
+// missing, `ready` stays false and DrawText falls back to stb_easy_font (ASCII).
+struct GlyphFont {
+    // 1024² comfortably fits all 239 glyphs at 48px with no oversampling
+    // (~50px cells -> ~400 slots). 512² only held ~25, so most glyphs (including
+    // every Greek letter, packed last) overflowed and rendered blank.
+    static constexpr int   kAtlasW = 1024;
+    static constexpr int   kAtlasH = 1024;
+    static constexpr float kBakePx = 48.0f;   // native baked height; scaled per draw
+    static constexpr int   kAsciiFirst = 32,  kAsciiCount = 95;    // 32..126
+    static constexpr int   kGreekFirst = 0x370, kGreekCount = 144; // 0x370..0x3FF
+
+    bool tried = false;
+    bool ready = false;
+    bgfx::TextureHandle atlas = BGFX_INVALID_HANDLE;
+    std::vector<stbtt_packedchar> ascii;   // kAsciiCount entries
+    std::vector<stbtt_packedchar> greek;   // kGreekCount entries
+};
+
+GlyphFont g_font;
+
+const char* kFontPath = "src/renderer/assets/DejaVuSans.ttf";
+
+// Bake the atlas on first use. Safe to call every DrawText (guarded by `tried`).
+void ensureGlyphFont() {
+    if (g_font.tried) return;
+    g_font.tried = true;
+
+    std::vector<uint8_t> ttf;
+    {
+        std::ifstream f(kFontPath, std::ios::binary | std::ios::ate);
+        if (!f) { std::fprintf(stderr, "bgfx: font %s missing; ASCII fallback\n", kFontPath); return; }
+        std::streamsize n = f.tellg();
+        f.seekg(0);
+        ttf.resize((size_t)n);
+        f.read((char*)ttf.data(), n);
+    }
+
+    g_font.ascii.resize(GlyphFont::kAsciiCount);
+    g_font.greek.resize(GlyphFont::kGreekCount);
+
+    std::vector<unsigned char> bmp((size_t)GlyphFont::kAtlasW * GlyphFont::kAtlasH);
+    stbtt_pack_context pc;
+    if (!stbtt_PackBegin(&pc, bmp.data(), GlyphFont::kAtlasW, GlyphFont::kAtlasH, 0, 1, nullptr)) {
+        std::fprintf(stderr, "bgfx: stbtt_PackBegin failed; ASCII fallback\n");
+        return;
+    }
+    // No oversampling: it doubles each glyph's atlas footprint, which is what
+    // overflowed the old 512² atlas. A 48px bake downscaled with bilinear is crisp
+    // enough for HUD/label text.
+    stbtt_PackSetOversampling(&pc, 1, 1);
+
+    stbtt_pack_range ranges[2] = {};
+    ranges[0].font_size                        = GlyphFont::kBakePx;
+    ranges[0].first_unicode_codepoint_in_range = GlyphFont::kAsciiFirst;
+    ranges[0].num_chars                        = GlyphFont::kAsciiCount;
+    ranges[0].chardata_for_range               = g_font.ascii.data();
+    ranges[1].font_size                        = GlyphFont::kBakePx;
+    ranges[1].first_unicode_codepoint_in_range = GlyphFont::kGreekFirst;
+    ranges[1].num_chars                        = GlyphFont::kGreekCount;
+    ranges[1].chardata_for_range               = g_font.greek.data();
+    // Returns 0 if any glyph didn't fit; unpacked glyphs stay zeroed (invisible).
+    int packed = stbtt_PackFontRanges(&pc, ttf.data(), 0, ranges, 2);
+    stbtt_PackEnd(&pc);
+    if (!packed)
+        std::fprintf(stderr, "bgfx: glyph atlas overflow (%dx%d) — some glyphs will be blank\n",
+                     GlyphFont::kAtlasW, GlyphFont::kAtlasH);
+    else
+        std::fprintf(stderr, "bgfx: glyph atlas baked OK (%d ASCII + %d Greek)\n",
+                     GlyphFont::kAsciiCount, GlyphFont::kGreekCount);
+
+    // Expand 8-bit coverage -> RGBA8 white with alpha = coverage, so the generic
+    // 2D shader (texture * tint * vcolor) yields tinted anti-aliased glyphs.
+    const uint32_t px = (uint32_t)GlyphFont::kAtlasW * GlyphFont::kAtlasH;
+    const bgfx::Memory* mem = bgfx::alloc(px * 4);
+    for (uint32_t i = 0; i < px; ++i) {
+        mem->data[i*4+0] = 255; mem->data[i*4+1] = 255;
+        mem->data[i*4+2] = 255; mem->data[i*4+3] = bmp[i];
+    }
+    g_font.atlas = bgfx::createTexture2D((uint16_t)GlyphFont::kAtlasW, (uint16_t)GlyphFont::kAtlasH,
+                                         false, 1, bgfx::TextureFormat::RGBA8,
+                                         BGFX_SAMPLER_NONE, mem);
+    g_font.ready = bgfx::isValid(g_font.atlas);
+}
 
 uint32_t packRgba(RColor c) {
     return (uint32_t(c.r) << 24) | (uint32_t(c.g) << 16) | (uint32_t(c.b) << 8) | uint32_t(c.a);
@@ -233,6 +324,8 @@ void BgfxBackend::Shutdown() {
     if (bgfx::isValid(earthRough_)) bgfx::destroy(earthRough_);
     if (bgfx::isValid(earthEmiss_)) bgfx::destroy(earthEmiss_);
     if (bgfx::isValid(white_))      bgfx::destroy(white_);
+    if (bgfx::isValid(g_font.atlas)) { bgfx::destroy(g_font.atlas); g_font.atlas = BGFX_INVALID_HANDLE; }
+    g_font.ready = false; g_font.tried = false;   // allow a fresh bake if re-Init'd
     if (bgfx::isValid(generic_))    bgfx::destroy(generic_);
     if (bgfx::isValid(earthProg_))  bgfx::destroy(earthProg_);
     if (bgfx::isValid(cloudProg_))  bgfx::destroy(cloudProg_);
@@ -280,7 +373,20 @@ FrameInput BgfxBackend::PollInput() {
     float mz = (down(GLFW_KEY_W) ? 1.0f : 0.0f) - (down(GLFW_KEY_S) ? 1.0f : 0.0f);
     bool boost = down(GLFW_KEY_LEFT_SHIFT) || down(GLFW_KEY_RIGHT_SHIFT);
     bool recenter = down(GLFW_KEY_F);
-    return FrameInput{ dx, dy, w, left, mx, my, mz, boost, recenter };
+    // Tab cycles the primary rocket (edge-triggered); Shift+Tab goes backwards.
+    bool tab  = down(GLFW_KEY_TAB);
+    bool edge = tab && !prevTab_;
+    prevTab_  = tab;
+    bool next = edge && !boost;
+    bool prev = edge &&  boost;
+    // Number keys 1-9 toggle overlays (edge-triggered). GLFW_KEY_1..9 == 49..57.
+    int toggle = 0;
+    for (int d = 1; d <= 9; ++d) {
+        bool now = down(GLFW_KEY_0 + d);
+        if (now && !prevDigit_[d]) toggle = d;
+        prevDigit_[d] = now;
+    }
+    return FrameInput{ dx, dy, w, left, mx, my, mz, boost, recenter, next, prev, toggle };
 }
 
 float  BgfxBackend::FrameTime() const { return (float)frameDt_; }
@@ -361,6 +467,31 @@ void BgfxBackend::Begin3D(const RCamera& cam) {
 }
 
 void BgfxBackend::End3D() {}
+
+ScreenPoint BgfxBackend::WorldToScreen(const RVec3& viewPos) const {
+    if (width_ <= 0 || height_ <= 0) return { 0, 0, false };
+    // Rebuild the same view/proj as Begin3D and project the point to NDC.
+    float view[16], proj[16], vp[16];
+    bx::mtxLookAt(view, bx::Vec3{ cam_.position.x, cam_.position.y, cam_.position.z },
+                        bx::Vec3{ cam_.target.x,   cam_.target.y,   cam_.target.z },
+                        bx::Vec3{ cam_.up.x,       cam_.up.y,       cam_.up.z },
+                  bx::Handedness::Right);
+    float aspect = (float)width_ / (float)height_;
+    bx::mtxProj(proj, cam_.fovy, aspect, near_, far_,
+                bgfx::getCaps()->homogeneousDepth, bx::Handedness::Right);
+    bx::mtxMul(vp, view, proj);
+
+    float p[4]    = { viewPos.x, viewPos.y, viewPos.z, 1.0f };
+    float clip[4];
+    bx::vec4MulMtx(clip, p, vp);
+    if (clip[3] <= 0.0f) return { 0, 0, false };            // behind the camera
+    float ndcx = clip[0] / clip[3], ndcy = clip[1] / clip[3];
+    return { (ndcx * 0.5f + 0.5f) * (float)width_,
+             (1.0f - (ndcy * 0.5f + 0.5f)) * (float)height_, true };
+}
+
+int BgfxBackend::ScreenWidth() const  { return width_; }
+int BgfxBackend::ScreenHeight() const { return height_; }
 
 void BgfxBackend::DrawModel(MeshHandle h, const RMat4& model, const Material& mat) {
     if (h == 0 || h > meshes_.size()) return;
@@ -765,6 +896,25 @@ void BgfxBackend::submit2DTris(const Vertex* v, uint32_t count, RColor tint) {
     bgfx::submit(1, generic_);
 }
 
+void BgfxBackend::submitTextTris(const Vertex* v, uint32_t count, RColor tint, bgfx::TextureHandle atlas) {
+    if (count < 3) return;
+    if (bgfx::getAvailTransientVertexBuffer(count, layout_) < count) return;
+    bgfx::TransientVertexBuffer tvb;
+    bgfx::allocTransientVertexBuffer(&tvb, count, layout_);
+    std::memcpy(tvb.data, v, count * sizeof(Vertex));
+
+    bgfx::setVertexBuffer(0, &tvb);
+    float t[4] = { tint.r / 255.0f, tint.g / 255.0f, tint.b / 255.0f, tint.a / 255.0f };
+    bgfx::setUniform(u_tint_, t);
+    float depth[4] = { far_, 0, 0, 0 };
+    bgfx::setUniform(u_depth_, depth);
+    float unlit[4] = { 0, 0, 0, 0 };
+    bgfx::setUniform(u_light_, unlit);
+    bgfx::setTexture(0, s_tex_, atlas);   // glyph atlas: white rgb, alpha = coverage
+    bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_BLEND_ALPHA);
+    bgfx::submit(1, generic_);
+}
+
 void BgfxBackend::DrawRect(int x, int y, int w, int h, RColor c) {
     float x0 = (float)x, y0 = (float)y, x1 = (float)(x + w), y1 = (float)(y + h);
     auto V = [](float px, float py) { return Vertex{ {px, py, 0}, {0,0,0}, 0, 0, kWhite }; };
@@ -780,26 +930,70 @@ void BgfxBackend::DrawRectLines(int x, int y, int w, int h, RColor c) {
 }
 
 void BgfxBackend::DrawText(const char* text, int x, int y, int font_size, RColor c) {
-    static char quads[64000];   // stb vertex buffer: 16 bytes/vertex, 4 verts/quad
-    int nq = stb_easy_font_print((float)x, (float)y, (char*)text, nullptr, quads, sizeof(quads));
-    if (nq <= 0) return;
+    ensureGlyphFont();
 
-    const float scale = font_size / 8.0f;   // stb base glyphs are ~8px tall
-    struct SV { float x, y, z; unsigned char col[4]; };
-    const SV* sv = (const SV*)quads;
+    // Fallback: ASCII-only vector font if the TTF atlas is unavailable.
+    if (!g_font.ready) {
+        static char quads[64000];   // stb vertex buffer: 16 bytes/vertex, 4 verts/quad
+        int nq = stb_easy_font_print((float)x, (float)y, (char*)text, nullptr, quads, sizeof(quads));
+        if (nq <= 0) return;
+        const float scale = font_size / 8.0f;   // stb base glyphs are ~8px tall
+        struct SV { float x, y, z; unsigned char col[4]; };
+        const SV* sv = (const SV*)quads;
+        std::vector<Vertex> tris;
+        tris.reserve(nq * 6);
+        auto put = [&](const SV& s) {
+            tris.push_back(Vertex{ { x + (s.x - x) * scale, y + (s.y - y) * scale, 0 }, {0,0,0}, 0, 0, kWhite });
+        };
+        for (int q = 0; q < nq; ++q) {
+            const SV& v0 = sv[q*4+0]; const SV& v1 = sv[q*4+1];
+            const SV& v2 = sv[q*4+2]; const SV& v3 = sv[q*4+3];
+            put(v0); put(v1); put(v2);
+            put(v0); put(v2); put(v3);
+        }
+        submit2DTris(tris.data(), (uint32_t)tris.size(), c);
+        return;
+    }
+
+    // Textured glyph path. Quads come out of stb in baked pixels; scale to the
+    // requested size and place the baseline ~0.75*size below the top-left (x,y).
+    const float scale    = font_size / GlyphFont::kBakePx;
+    const float baseline = y + font_size * 0.75f;
+    float penx = 0.0f, peny = 0.0f;   // baked-pixel cursor (baseline at peny)
 
     std::vector<Vertex> tris;
-    tris.reserve(nq * 6);
-    auto put = [&](const SV& s) {
-        tris.push_back(Vertex{ { x + (s.x - x) * scale, y + (s.y - y) * scale, 0 }, {0,0,0}, 0, 0, kWhite });
+    auto quad = [&](float x0, float y0, float x1, float y1, float s0, float t0, float s1, float t1) {
+        auto V = [](float px, float py, float u, float v) { return Vertex{ {px, py, 0}, {0,0,0}, u, v, kWhite }; };
+        tris.push_back(V(x0,y0,s0,t0)); tris.push_back(V(x1,y0,s1,t0)); tris.push_back(V(x1,y1,s1,t1));
+        tris.push_back(V(x0,y0,s0,t0)); tris.push_back(V(x1,y1,s1,t1)); tris.push_back(V(x0,y1,s0,t1));
     };
-    for (int q = 0; q < nq; ++q) {
-        const SV& v0 = sv[q*4+0]; const SV& v1 = sv[q*4+1];
-        const SV& v2 = sv[q*4+2]; const SV& v3 = sv[q*4+3];
-        put(v0); put(v1); put(v2);
-        put(v0); put(v2); put(v3);
+
+    // Minimal UTF-8 decode (BMP is enough for ASCII + Greek).
+    const unsigned char* s = (const unsigned char*)text;
+    while (*s) {
+        int cp = *s;
+        if      (cp < 0x80) { s += 1; }
+        else if ((cp >> 5) == 0x6 && s[1]) { cp = ((cp & 0x1F) << 6) | (s[1] & 0x3F); s += 2; }
+        else if ((cp >> 4) == 0xE && s[1] && s[2]) {
+            cp = ((cp & 0x0F) << 12) | ((s[1] & 0x3F) << 6) | (s[2] & 0x3F); s += 3;
+        } else { s += 1; }   // skip malformed / non-BMP
+
+        // Resolve codepoint -> (packed-char table, index), falling back to '?'.
+        const stbtt_packedchar* base; int idx;
+        if (cp >= GlyphFont::kAsciiFirst && cp < GlyphFont::kAsciiFirst + GlyphFont::kAsciiCount) {
+            base = g_font.ascii.data(); idx = cp - GlyphFont::kAsciiFirst;
+        } else if (cp >= GlyphFont::kGreekFirst && cp < GlyphFont::kGreekFirst + GlyphFont::kGreekCount) {
+            base = g_font.greek.data(); idx = cp - GlyphFont::kGreekFirst;
+        } else {
+            base = g_font.ascii.data(); idx = '?' - GlyphFont::kAsciiFirst;
+        }
+        stbtt_aligned_quad q;
+        stbtt_GetPackedQuad(base, GlyphFont::kAtlasW, GlyphFont::kAtlasH, idx, &penx, &peny, &q, 0);
+        quad(x + q.x0 * scale, baseline + q.y0 * scale,
+             x + q.x1 * scale, baseline + q.y1 * scale,
+             q.s0, q.t0, q.s1, q.t1);
     }
-    submit2DTris(tris.data(), (uint32_t)tris.size(), c);
+    if (!tris.empty()) submitTextTris(tris.data(), (uint32_t)tris.size(), c, g_font.atlas);
 }
 
 void BgfxBackend::DrawFPS(int x, int y) {

@@ -1,5 +1,5 @@
 CXX      := g++
-CXXFLAGS := -std=c++20 -Wall -Wpedantic -Isrc -pthread -O3 -flto -funroll-loops
+CXXFLAGS := -std=c++20 -Wall -Wpedantic -Isrc -pthread -O3 -flto -funroll-loops -D_USE_MATH_DEFINES
 
 COMMON_SRCS := src/main.cpp src/renderer/renderer.cpp src/renderer/geometry.cpp \
                src/sim/sim.cpp src/sim/rocket.cpp src/fc/fc.cpp src/fc/stages.cpp
@@ -19,7 +19,9 @@ ASSET_DIR   := src/renderer/bgfx
 TEX_ZIP     := $(ASSET_DIR)/bgfx.textures.zip
 BGFX_TEXTURES_READY := $(ASSET_DIR)/.bgfx_textures_ready
 BGFX_DEFS   := -DUSE_BGFX -D_USE_MATH_DEFINES -DBX_CONFIG_DEBUG=0
-BGFX_INCS   := -I$(BGFX_SUB)/bgfx/include -I$(BGFX_SUB)/bx/include -I$(BGFX_SUB)/bimg/include
+# bgfx/3rdparty provides stb/stb_truetype.h for the Greek glyph atlas.
+BGFX_INCS   := -I$(BGFX_SUB)/bgfx/include -I$(BGFX_SUB)/bx/include -I$(BGFX_SUB)/bimg/include \
+               -I$(BGFX_SUB)/bgfx/3rdparty
 BGFX_LIBS   := $(BGFX_DIR)/cmake/bgfx/libbgfx.a \
                $(BGFX_DIR)/cmake/bimg/libbimg_decode.a \
                $(BGFX_DIR)/cmake/bimg/libbimg.a \

@@ -14,6 +14,11 @@ struct RCamera {
     float fovy;   // vertical field of view, degrees
 };
 
+// A view-space point projected to the 2D screen. `visible` is false when the
+// point is behind the camera (x/y are meaningless then). Used to place floating
+// labels over 3D geometry.
+struct ScreenPoint { float x, y; bool visible; };
+
 // Per-frame input snapshot, polled once at the top of each frame.
 struct FrameInput {
     float mouse_dx, mouse_dy;  // mouse movement since last frame, pixels
@@ -25,6 +30,12 @@ struct FrameInput {
     float move_z   = 0.0f;     // forward: +fwd   (W) / -back (S)
     bool  boost    = false;    // hold to move faster (Left Shift)
     bool  recenter = false;    // snap the view pivot back to the rocket (F)
+    // Cycle which rocket is the primary/selected target (edge-triggered):
+    // Tab -> next, Shift+Tab -> previous.
+    bool  next_target = false;
+    bool  prev_target = false;
+    // Number key 1-9 pressed this frame (edge-triggered), else 0. Toggles overlays.
+    int   toggle = 0;
 };
 
 enum class BlendMode { Alpha, Additive };
