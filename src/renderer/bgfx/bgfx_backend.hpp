@@ -33,6 +33,10 @@ public:
     void Begin3D(const RCamera& cam) override;
     void End3D() override;
 
+    ScreenPoint WorldToScreen(const RVec3& viewPos) const override;
+    int ScreenWidth() const override;
+    int ScreenHeight() const override;
+
     void DrawModel(MeshHandle h, const RMat4& model, const Material& mat) override;
     void DrawLines(const LineVertex* v, size_t count, float width) override;
     void DrawRocket(const RocketFrame& f) override;
@@ -46,6 +50,8 @@ public:
 private:
     void ensureEarth();
     void submit2DTris(const Vertex* v, uint32_t count, RColor tint);  // view 1, no depth
+    // 2D text triangles textured by the glyph atlas (view 1, no depth).
+    void submitTextTris(const Vertex* v, uint32_t count, RColor tint, bgfx::TextureHandle atlas);
 
     struct GpuMesh { bgfx::VertexBufferHandle vbh; bgfx::IndexBufferHandle ibh; };
 
@@ -56,6 +62,8 @@ private:
     // input / timing
     double prevX_ = 0, prevY_ = 0;
     bool   havePrev_ = false;
+    bool   prevTab_ = false;           // edge-detect Tab for primary-rocket cycling
+    bool   prevDigit_[10] = {};        // edge-detect number keys 1-9 for overlay toggles
     float  wheel_ = 0;                 // accumulated by the scroll callback
     double startTime_ = 0, lastTime_ = 0, frameDt_ = 0;
 

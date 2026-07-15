@@ -48,6 +48,15 @@ public:
     virtual void Begin3D(const RCamera& cam) = 0;
     virtual void End3D() = 0;
 
+    // Project a view-space point (as passed to Begin3D/DrawLines) to 2D screen
+    // pixels, for placing overlay labels over 3D geometry. Valid after the most
+    // recent Begin3D (it uses that camera/viewport). `visible` is false when the
+    // point is behind the camera.
+    virtual ScreenPoint WorldToScreen(const RVec3& viewPos) const = 0;
+    // Current framebuffer size in pixels (for clamping/culling overlay labels).
+    virtual int ScreenWidth() const = 0;
+    virtual int ScreenHeight() const = 0;
+
     // A static mesh placed by a model matrix, shaded/blended per Material.
     virtual void DrawModel(MeshHandle h, const RMat4& model, const Material& mat) = 0;
     // A transient line list in view space (pairs of vertices), per-vertex colour.

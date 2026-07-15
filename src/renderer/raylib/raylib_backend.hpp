@@ -26,6 +26,10 @@ public:
     void Begin3D(const RCamera& cam) override;
     void End3D() override;
 
+    ScreenPoint WorldToScreen(const RVec3& viewPos) const override;
+    int ScreenWidth() const override;
+    int ScreenHeight() const override;
+
     void DrawModel(MeshHandle h, const RMat4& model, const Material& mat) override;
     void DrawLines(const LineVertex* v, size_t count, float width) override;
     void DrawRocket(const RocketFrame& f) override;
@@ -50,6 +54,14 @@ private:
     int      sunDirLoc_      = -1;
     int      earthCenterLoc_ = -1;
     int      camPosLoc_      = -1;
+
+    // Greek-capable font for overlay text (Font ID labels + telemetry). Falls
+    // back to raylib's built-in ASCII font if the TTF fails to load.
+    ::Font   font_{};
+    bool     haveFont_ = false;
+
+    // Last camera handed to Begin3D, kept so WorldToScreen can project labels.
+    Camera3D cam3d_{};
 
     // Backend-owned scene objects (the simple reference look).
     RocketModel   rocket_{};

@@ -4,6 +4,7 @@
 #include <raymath.h>
 #include <rlgl.h>
 #include <cassert>
+#include <vector>
 
 namespace renderer {
 
@@ -11,6 +12,18 @@ namespace {
 
 inline Vector3 toRl(const RVec3& v) { return { v.x, v.y, v.z }; }
 inline Color   toRl(RColor c)       { return { c.r, c.g, c.b, c.a }; }
+
+// Greek-capable TTF (bundled). Loaded once; ASCII + the Greek block are baked so
+// rocket IDs like "α3" render. Relative to the repo root (app runs from there).
+const char* kFontPath = "src/renderer/assets/DejaVuSans.ttf";
+
+// Codepoints to bake into the font atlas: ASCII printable + the Greek block.
+std::vector<int> fontCodepoints() {
+    std::vector<int> cp;
+    for (int c = 32;     c <= 126;    ++c) cp.push_back(c);  // ASCII printable
+    for (int c = 0x0370; c <= 0x03FF; ++c) cp.push_back(c);  // Greek and Coptic
+    return cp;
+}
 
 // RMat4 is column-major and raylib's Matrix field m{k} is the column-major
 // element k, so a field-by-field copy is the correct conversion (the structs'
@@ -81,12 +94,19 @@ void RaylibBackend::Init(int width, int height, const char* title) {
     camPosLoc_      = GetShaderLocation(earthShader_, "camPos");
     earthMat_        = LoadMaterialDefault();
     earthMat_.shader = earthShader_;
+
+    // Bake the Greek-capable font at a comfortable size for scaling down.
+    std::vector<int> cp = fontCodepoints();
+    font_ = LoadFontEx(kFontPath, 48, cp.data(), (int)cp.size());
+    haveFont_ = font_.texture.id != 0 && font_.glyphCount > 0;
+    if (haveFont_) SetTextureFilter(font_.texture, TEXTURE_FILTER_BILINEAR);
 }
 
 void RaylibBackend::Shutdown() {
     for (auto& m : meshes_)   UnloadMesh(m);
     for (auto& t : textures_) UnloadTexture(t);
     UnloadShader(earthShader_);
+    if (haveFont_) UnloadFont(font_);
     CloseWindow();
 }
 
@@ -99,11 +119,20 @@ FrameInput RaylibBackend::PollInput() {
     float mz = (IsKeyDown(KEY_W) ? 1.0f : 0.0f) - (IsKeyDown(KEY_S) ? 1.0f : 0.0f);
     bool boost = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
     bool recenter = IsKeyDown(KEY_F);
+    // Tab cycles the primary rocket (edge-triggered); Shift+Tab goes backwards.
+    bool tab  = IsKeyPressed(KEY_TAB);
+    bool next = tab && !boost;
+    bool prev = tab &&  boost;
+    // Number keys 1-9 toggle overlays (edge-triggered). KEY_ONE..KEY_NINE are
+    // consecutive, so map the first that was pressed this frame.
+    int toggle = 0;
+    for (int k = KEY_ONE; k <= KEY_NINE; ++k) if (IsKeyPressed(k)) { toggle = k - KEY_ONE + 1; break; }
     return FrameInput {
         d.x, d.y,
         GetMouseWheelMove(),
         IsMouseButtonDown(MOUSE_BUTTON_LEFT),
         mx, my, mz, boost, recenter,
+        next, prev, toggle,
     };
 }
 
@@ -167,10 +196,24 @@ void RaylibBackend::Begin3D(const RCamera& cam) {
         cam.fovy,
         CAMERA_PERSPECTIVE,
     };
+    cam3d_ = c;   // kept for WorldToScreen
     BeginMode3D(c);
 }
 
 void RaylibBackend::End3D() { EndMode3D(); }
+
+ScreenPoint RaylibBackend::WorldToScreen(const RVec3& viewPos) const {
+    // Cull points behind the camera: GetWorldToScreen still returns coordinates
+    // for them, but mirrored/nonsensical, so gate on the forward half-space.
+    Vector3 fwd = Vector3Normalize(Vector3Subtract(cam3d_.target, cam3d_.position));
+    Vector3 rel = Vector3Subtract(toRl(viewPos), cam3d_.position);
+    if (Vector3DotProduct(rel, fwd) <= 0.0f) return { 0, 0, false };
+    Vector2 s = GetWorldToScreen(toRl(viewPos), cam3d_);
+    return { s.x, s.y, true };
+}
+
+int RaylibBackend::ScreenWidth() const  { return GetScreenWidth(); }
+int RaylibBackend::ScreenHeight() const { return GetScreenHeight(); }
 
 void RaylibBackend::DrawModel(MeshHandle h, const RMat4& model, const Material& mat) {
     if (h == 0 || h > meshes_.size()) return;
@@ -225,7 +268,13 @@ void RaylibBackend::DrawRectLines(int x, int y, int w, int h, RColor c) {
 }
 
 void RaylibBackend::DrawText(const char* text, int x, int y, int font_size, RColor c) {
-    ::DrawText(text, x, y, font_size, toRl(c));
+    if (haveFont_) {
+        // spacing scales with size so glyphs don't crowd at large sizes.
+        DrawTextEx(font_, text, { (float)x, (float)y }, (float)font_size,
+                   font_size / 10.0f, toRl(c));
+    } else {
+        ::DrawText(text, x, y, font_size, toRl(c));   // ASCII fallback
+    }
 }
 
 void RaylibBackend::DrawFPS(int x, int y) { ::DrawFPS(x, y); }

@@ -2,6 +2,9 @@
 #include "render_backend.hpp"
 #include "../constants.hpp"
 #include "../types.hpp"
+#include "../sim/rocket.hpp"   // RocketState (returned by primaryState / sim::get_state)
+#include <vector>
+#include <string>
 
 namespace sim { class Sim; }
 
@@ -17,7 +20,7 @@ public:
 
 private:
     void HandleInput();
-    void UpdateThrustLevel();
+    void UpdateThrustLevels();
     RCamera BuildCamera() const;
     void DrawFrame(const RCamera& cam);
     void DrawEarth(const RCamera& cam, RVec3 earthC);
@@ -27,7 +30,29 @@ private:
     void DrawSurfaceMarkers() const;
     void DrawRocket() const;
     void DrawPredictedTrajectory() const;
+    void DrawTrails() const;
     void DrawTelemetry() const;
+    // 2D overlay: the primary rocket's ID in a top-centre HUD, and floating ID
+    // labels above every other rocket. Drawn after End3D.
+    void DrawRocketLabels() const;
+    // 2D overlay: number-key legend showing which overlays are on/off.
+    void DrawOverlayLegend() const;
+
+    // Append the current position of each rocket to its flown-path trail.
+    void UpdateTrails();
+
+    // Draw one rocket's hull + gimballed engine/plume at its ECI state.
+    void DrawOneRocket(const RocketState& st, float thrustLevel) const;
+
+    // Per-rocket Greek IDs, chosen by launch-origin latitude band (7.5° -> one of
+    // 24 Greek letters α..ω) plus a 1-based ordinal within that band. Indexed to
+    // match states_.
+    std::vector<std::string> rocketIds() const;
+
+    // The sim publishes every rocket's state; states_ is sampled once per frame.
+    // primaryState() returns the currently selected rocket (Tab/Shift+Tab), or a
+    // default RocketState when no rockets are live yet.
+    RocketState primaryState() const;
 
     // ECI position (m) -> shifted render-scene position (km), with the rocket
     // held at the world origin. Differencing in double before the float cast
@@ -40,10 +65,16 @@ private:
         return { float(d.x * M_TO_KM), float(d.z * M_TO_KM), float(-d.y * M_TO_KM) };
     }
 
-    // The scene is shifted so this point (the rocket's ECI position) sits at the
-    // world origin, keeping geometry inside float's precision sweet spot.
-    // Sampled once per frame so camera, axes, rocket, and Earth all agree.
+    // The scene is shifted so this point (the primary rocket's ECI position) sits
+    // at the world origin, keeping geometry inside float's precision sweet spot.
+    // Sampled once per frame so camera, axes, rockets, and Earth all agree.
     Vec3 p_ref_eci_ { 0, 0, 0 };
+
+    // All rocket states, sampled once per frame (sim::get_state). primary_ selects
+    // the one the camera centres on and the telemetry panel describes; cycled with
+    // Tab / Shift+Tab.
+    std::vector<RocketState> states_;
+    int  primary_ = 0;
 
     RenderBackend&   backend_;
     const sim::Sim&  sim_;
@@ -58,10 +89,27 @@ private:
     // flies it across the surface so you can inspect terrain away from the rocket.
     RVec3 pivot_ { 0.0f, 0.0f, 0.0f };
 
-    // Exhaust plume state. The sim exposes no "firing" flag, so we infer it from
-    // propellant being burned and smooth it into a level that drives the plume.
-    float  thrust_   = 0.0f;   // [0,1], ramps with the motor
-    double prevFuel_ = -1.0;   // previous propellant sample (-1 = none yet)
+    // Per-rocket exhaust plume state. The sim exposes no "firing" flag, so we
+    // infer it from propellant being burned and smooth it into a level that drives
+    // the plume. Indexed to match states_ (resized when the rocket count changes).
+    std::vector<float>  thrustLvl_;   // [0,1] per rocket, ramps with the motor
+    std::vector<double> prevFuel_;    // previous propellant sample (-1 = none yet)
+
+    // Flown-path history per rocket, in ECI metres (recorded regardless of whether
+    // trails are shown, so toggling on reveals the full path). Indexed to match
+    // states_; reset when the rocket count changes.
+    std::vector<std::vector<Vec3>> trails_;
+
+    // Overlay visibility, toggled by number keys 1-8 (see HandleInput). All on by
+    // default so the initial view matches the pre-toggle behaviour.
+    bool showTrails_         = true;   // 1
+    bool showPredicted_      = true;   // 2
+    bool showBodyAxes_       = true;   // 3
+    bool showStateVectors_   = true;   // 4
+    bool showSurfaceMarkers_ = true;   // 5
+    bool showEciAxes_        = true;   // 6
+    bool showLabels_         = true;   // 7
+    bool showTelemetry_      = true;   // 8
 };
 
 }
