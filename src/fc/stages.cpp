@@ -190,7 +190,7 @@ void FlightController::s2_powered() {
     // the cutoff should be tied to the max possible delta V of the 3rd stage engine
     double next_delta_v = props.stages[2].isp * g0 * log((props.stages[2].m_dry + props.stages[2].m_fuel) / props.stages[2].m_dry);
     double estimated_s2_burn_time = props.stages[1].m_fuel / (props.stages[1].max_mass_flow_rate());
-    if (v_gain.norm() < next_delta_v - 0.3 * next_delta_v || burn_time > estimated_s2_burn_time) { // within 30% for margin of error, or motor depleted
+    if (v_gain.norm() < next_delta_v - 0.2 * next_delta_v || burn_time > estimated_s2_burn_time) { // within 20% for margin of error, or motor depleted
         // stop engine to stop overshoot
         cs.cutoff_engine_flag = true;
         std::cout << "ENGINE_CUTOFF at " << v_gain.norm() << "m/s " << "with next stage having delta v: " << next_delta_v << "m/s\n";

@@ -23,21 +23,25 @@ namespace sim {
         ///////////////////////////////////////////////////////////////////////////////////////////////
         // rocket placement process                                                                  //
         ///////////////////////////////////////////////////////////////////////////////////////////////
-        const double origin_center_lat = 35.948416;
-        const double origin_center_long = -83.936084;
+        const double origin_center_lat = 48.209;
+        const double origin_center_long = -101.406;
         const double possible_launch_site_radius = 100; //km -- the radius by which rocket launch sites will be generated randomly
 
-        const double target_lat = 48.859113;
-        const double target_long = 2.345740;
+        const double target_center_lat = 53.9;
+        const double target_center_long = 43.3;
 
         std::mt19937 rng(1201);
-        std::uniform_real_distribution<double> r(-0.2, 0.2);
+        std::uniform_real_distribution<double> ro(-0.01, 0.01);
+        std::uniform_real_distribution<double> rt(-0.2, 0.2);
 
-        for (int i = 0; i < 15; i++) {
-            double start_lat_gen = origin_center_lat * (1 + r(rng));
-            double start_long_gen = origin_center_long * (1 + r(rng));
+        for (int i = 0; i < 150; i++) {
+            double start_lat_gen = origin_center_lat * (1 + ro(rng));
+            double start_long_gen = origin_center_long * (1 + ro(rng));
 
-            Rocket new_rocket{start_lat_gen, start_long_gen, target_lat, target_long};
+            double target_lat_gen = target_center_lat * (1 + rt(rng));
+            double target_long_gen = target_center_long * (1 + 4.0 * rt(rng));
+
+            Rocket new_rocket{start_lat_gen, start_long_gen, target_lat_gen, target_long_gen};
             rocket_list.push_back(new_rocket);
         }
 
