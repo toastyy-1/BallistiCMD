@@ -1,6 +1,7 @@
 #include "renderer.hpp"
 #include "geometry.hpp"
 #include "../sim/sim.hpp"
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstdarg>
@@ -35,6 +36,14 @@ RocketState toEcef(RocketState s) {
 float clampf(float v, float lo, float hi) {
     return fmaxf(lo, fminf(hi, v));
 }
+
+// Per-frame line-vertex budgets. All dynamic line geometry shares bgfx's 64 MB
+// transient pool (~1.86M verts). Trails + predicted paths grow without bound with
+// rocket count/flight time, so each is capped and decimated to stay within these
+// budgets, leaving generous headroom for the HUD, labels, and debug overlays --
+// which are submitted last and would otherwise be the first to starve and flicker.
+constexpr size_t kTrailVertexBudget     = 900000;   // ~450k retained trail points
+constexpr size_t kPredictedVertexBudget = 700000;   // ~350k integrated path points
 
 float rvDist(const RVec3& a, const RVec3& b) {
     float dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z;
@@ -308,17 +317,26 @@ void Renderer::DrawPredictedTrajectory() const {
         return p * (-GM_EARTH / (rn * rn * rn));
     };
 
-    const double dt        = 1.0;     // s per step
-    const int    max_steps = 20000;   // path-length cap
+    const size_t n = states_.size();
+    if (n == 0) return;
 
+    const double dt       = 1.0;       // s per step
+    const int    hardMax  = 20000;     // path-length cap per rocket
+    // Share the predicted budget across all rockets: each emits 2 verts/step, so
+    // cap steps so the aggregate stays within budget. Also bounds the RK4 work,
+    // which is the dominant CPU cost of this overlay at high rocket counts.
+    size_t perRocket = kPredictedVertexBudget / (2 * n);
+    int    max_steps = (int)std::min<size_t>(hardMax, perRocket < 1 ? 1 : perRocket);
+
+    // Coalesce every rocket's path into a single line-list submit. The paths are
+    // independent (prev,cur) pairs, so concatenation needs no separator.
     std::vector<LineVertex> path;
-    for (size_t idx = 0; idx < states_.size(); idx++) {
+    path.reserve(kPredictedVertexBudget + 2);
+    for (size_t idx = 0; idx < n; idx++) {
         Vec3  r = states_[idx].r;
         Vec3  v = states_[idx].v;
         RColor col = ((int)idx == primary_) ? kYellow : kGray;
 
-        path.clear();
-        path.reserve(max_steps * 2);
         RVec3 prev = ToView(r);
         for (int i = 0; i < max_steps; i++) {
             Vec3 k1r = v,                k1v = grav(r);
@@ -335,30 +353,52 @@ void Renderer::DrawPredictedTrajectory() const {
 
             if (r.norm() <= EARTH_RADIUS) break;      // reached the surface
         }
-        backend_.DrawLines(path.data(), path.size(), 2.0f);
     }
+    backend_.DrawLines(path.data(), path.size(), 2.0f);
 }
 
 void Renderer::DrawTrails() const {
     // The actual flown path of each rocket (history), as a polyline. Primary in
     // sky-blue, others dim grey — distinct from the yellow predicted trajectory.
+    // All rockets are coalesced into ONE line-list submit (independent (prev,cur)
+    // pairs concatenate freely), and the whole set is decimated by a shared stride
+    // so the aggregate stays within the trail budget: at high rocket counts / long
+    // flights the paths render slightly sparser instead of overflowing the pool and
+    // flickering out. Every trail always keeps its first and last point, so it stays
+    // connected end-to-end regardless of stride.
+    size_t totalPts = 0;
+    for (const std::vector<Vec3>& tr : trails_)
+        if (tr.size() >= 2) totalPts += tr.size();
+    if (totalPts == 0) return;
+
+    // Each retained point after the first emits ~2 verts. Pick the smallest stride
+    // that brings the emitted total under budget (ceil division).
+    size_t stride = 1;
+    if (totalPts * 2 > kTrailVertexBudget)
+        stride = (totalPts * 2 + kTrailVertexBudget - 1) / kTrailVertexBudget;
+
     std::vector<LineVertex> seg;
+    seg.reserve(kTrailVertexBudget + trails_.size() * 2);
     for (size_t i = 0; i < trails_.size(); i++) {
         const std::vector<Vec3>& tr = trails_[i];
         if (tr.size() < 2) continue;
         RColor col = ((int)i == primary_) ? kSkyBlue : kGray;
 
-        seg.clear();
-        seg.reserve(tr.size() * 2);
         RVec3 prev = ToView(tr[0]);
-        for (size_t k = 1; k < tr.size(); k++) {
+        for (size_t k = stride; k < tr.size(); k += stride) {
             RVec3 cur = ToView(tr[k]);
             seg.push_back({ prev, col });
             seg.push_back({ cur,  col });
             prev = cur;
         }
-        backend_.DrawLines(seg.data(), seg.size(), 2.0f);
+        // Connect the final point if the stride stepped past it.
+        if ((tr.size() - 1) % stride != 0) {
+            RVec3 cur = ToView(tr.back());
+            seg.push_back({ prev, col });
+            seg.push_back({ cur,  col });
+        }
     }
+    backend_.DrawLines(seg.data(), seg.size(), 2.0f);
 }
 
 void Renderer::DrawECIAxes() const {

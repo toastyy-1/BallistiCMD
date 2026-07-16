@@ -243,6 +243,13 @@ void BgfxBackend::Init(int width, int height, const char* title) {
     init.resolution.width  = (uint32_t)width_;
     init.resolution.height = (uint32_t)height_;
     init.resolution.reset  = reset_;
+    // All per-frame dynamic geometry (trails, predicted paths, debug lines, the 2D
+    // HUD, and rocket labels) is drawn from bgfx's shared transient vertex buffer,
+    // whose 6 MB default (~175k verts) is exhausted by even ~a dozen rockets with
+    // grown trails -- and once full, later submits (the HUD, labels) are silently
+    // dropped, so they flicker. 64 MB (~1.86M verts) headroom, sized to the
+    // per-frame line budget the renderer decimates to (see renderer.cpp).
+    init.limits.maxTransientVbSize = 256u << 20;
     if (!bgfx::init(init)) {
         std::fprintf(stderr, "bgfx: init failed\n");
         glfwDestroyWindow(window_);
@@ -544,7 +551,13 @@ void BgfxBackend::DrawModel(MeshHandle h, const RMat4& model, const Material& ma
 void BgfxBackend::DrawLines(const LineVertex* v, size_t count, float /*width*/) {
     if (count < 2) return;                       // bgfx GL has no portable line width (~1px)
     uint32_t n = (uint32_t)count;
-    if (bgfx::getAvailTransientVertexBuffer(n, layout_) < n) return;
+    // Degrade gracefully: if the batch doesn't fit the remaining transient pool,
+    // draw as much as fits (an even count -- line pairs) instead of dropping it all.
+    // The renderer budgets/decimates line geometry to stay well under the pool, so
+    // this is a safety net that keeps a partial trail rather than a vanished one.
+    uint32_t avail = bgfx::getAvailTransientVertexBuffer(n, layout_);
+    if (avail < 2) return;
+    if (avail < n) n = avail & ~1u;
     bgfx::TransientVertexBuffer tvb;
     bgfx::allocTransientVertexBuffer(&tvb, n, layout_);
     Vertex* dst = (Vertex*)tvb.data;

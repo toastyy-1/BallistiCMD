@@ -43,30 +43,34 @@ void appendBell(Mesh& m, float zT, float zE, float rT, float rE,
         }
 }
 
+bool sameDims(const RocketDims& a, const RocketDims& b) {
+    return a.length == b.length && a.cm_dist == b.cm_dist &&
+           a.radius == b.radius && a.engine_dist == b.engine_dist;
+}
+
 } // namespace
 
 void RocketModel::Ensure(RenderBackend& b, const RocketDims& dims) {
-    if (cone_ == 0) {   // first use: build the dimension-independent meshes too
+    if (cone_ == 0) {   // first use: build the dimension-independent meshes once
         cone_   = b.CreateMesh(geom::buildCone(kSides));
         sphere_ = b.CreateMesh(geom::buildSphere(1.0f, 16, 24));
-        dims_   = dims;
-        buildHullBell(b);
-        return;
     }
-    if (dims.length == dims_.length && dims.cm_dist == dims_.cm_dist &&
-        dims.radius == dims_.radius && dims.engine_dist == dims_.engine_dist)
-        return;
-    dims_ = dims;
-    buildHullBell(b);
+    // Already the selected hull/bell? (fast path for a homogeneous fleet)
+    if (hull_ != 0 && sameDims(dims_, dims)) return;
+
+    // Reuse a cached build for these dims if we've seen them, else build once.
+    for (const HullBell& e : cache_) {
+        if (sameDims(e.dims, dims)) { hull_ = e.hull; bell_ = e.bell; dims_ = dims; return; }
+    }
+    HullBell e = buildHullBell(b, dims);
+    cache_.push_back(e);
+    hull_ = e.hull; bell_ = e.bell; dims_ = dims;
 }
 
-void RocketModel::buildHullBell(RenderBackend& b) {
-    if (hull_) b.DestroyMesh(hull_);
-    if (bell_) b.DestroyMesh(bell_);
-
-    const float L      = (float)dims_.length;
-    const float cm     = (float)dims_.cm_dist;
-    const float radius = (float)dims_.radius;
+RocketModel::HullBell RocketModel::buildHullBell(RenderBackend& b, const RocketDims& d) const {
+    const float L      = (float)d.length;
+    const float cm     = (float)d.cm_dist;
+    const float radius = (float)d.radius;
 
     const RColor kBody   = { 226, 229, 235, 255 };  // brushed silver
     const RColor kNose   = { 196,  58,  58, 255 };  // red cap
@@ -113,14 +117,16 @@ void RocketModel::buildHullBell(RenderBackend& b) {
     geom::appendRevolve(hull, prof, kSides, kNose, /*capBase=*/true);
     setMR(hull, k, 0.05f, 0.5f);
 
-    hull_ = b.CreateMesh(hull);
+    MeshHandle hullH = b.CreateMesh(hull);
 
     // Engine bell: open, fluted nozzle in the gimbal-pivot frame (throat at z=0,
     // exit 1.6 m down). Throat narrow, flaring to a wide ridged exit. Dark, rough metal.
     Mesh bell;
     appendBell(bell, 0.0f, -1.6f, radius * 0.45f, radius * 1.25f, kSides, 20, 0.05f, kBell);
     setMR(bell, 0, 0.55f, 0.55f);
-    bell_ = b.CreateMesh(bell);
+    MeshHandle bellH = b.CreateMesh(bell);
+
+    return { d, hullH, bellH };
 }
 
 void RocketModel::Draw(RenderBackend& b, const RocketFrame& f) const {
