@@ -8,7 +8,8 @@ class Rocket;
 
 // the intitial states that the rocket starts at
 struct FCInitState {
-    Vec3 r_origin, r_target;
+    Vec3 r_origin;
+    Vec3 r_target_ecef;
     Quat q_origin;
 
     double launch_asimuth;
@@ -81,6 +82,7 @@ class FlightController {
     double countdown_start = 0;
 
     // helpers
+    Vec3 target_eci_at_time_of_arrival(double t_arrival) const { return ecef_to_eci(cs.is.r_target_ecef, t_arrival); }
     void init(Rocket& r, double current_time);
     FCInitState create_target_trajectory(double lat_target, double long_target, Rocket& r);
     void estimate_state();

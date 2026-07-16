@@ -21,6 +21,17 @@ double clampd(double v, double lo, double hi) {
     return fmax(lo, fmin(hi, v));
 }
 
+// convert a rocket state from ECI to the earth-fixed (ECEF) frame at its timestamp
+RocketState toEcef(RocketState s) {
+    double theta = EARTH_ROTATION_RATE * s.t;
+    Quat qz = { std::cos(theta * 0.5), 0.0, 0.0, -std::sin(theta * 0.5) }; // Rz(-theta)
+    s.r = eci_to_ecef(s.r, s.t);
+    s.v = eci_to_ecef(s.v, s.t);
+    s.a = eci_to_ecef(s.a, s.t);
+    s.q_rocket = qz * s.q_rocket;
+    return s;
+}
+
 float clampf(float v, float lo, float hi) {
     return fmaxf(lo, fminf(hi, v));
 }
@@ -81,6 +92,7 @@ void Renderer::Run() {
         // the ID overlay all agree. HandleInput may re-select the primary, so it
         // runs after the sample (it reads states_.size() to wrap).
         states_ = sim_.get_state();
+        for (RocketState& st : states_) st = toEcef(st);   // render in the earth-fixed frame
         HandleInput();
         p_ref_eci_ = primaryState().r;   // scene centred on the selected rocket
         UpdateThrustLevels();
@@ -223,9 +235,8 @@ void Renderer::DrawEarth(const RCamera& cam, RVec3 earthC) {
     RVec3 sun = rvNorm({ up.x*0.55f + 0.5f,
                          up.y*0.55f + 0.45f,
                          up.z*0.55f + 0.35f });
-    // Earth mesh is in ECI metres (+Z = north); place it at the shifted centre
-    // and apply the metre->km view basis. The differencing for earthC happened
-    // in double inside ToView, so float precision is fine from here on.
+    // Earth mesh is body-fixed (ECEF); the scene is rendered in that frame so the
+    // globe and its surface markers stay put while rockets show their ground track.
     EarthFrame f;
     f.model   = rmath::mul(rmath::translate(earthC), rmath::viewBasis((float)M_TO_KM));
     f.sun_dir = sun;
@@ -352,12 +363,15 @@ void Renderer::DrawTrails() const {
 
 void Renderer::DrawECIAxes() const {
     // ECI axes through the Earth's centre: X vernal equinox (red),
-    // Y 90E equatorial (green), Z north pole (blue).
+    // Y 90E equatorial (green), Z north pole (blue). The scene renders in the
+    // earth-fixed frame, so carry the inertial axes into ECEF at the current time.
     const double L = EARTH_RADIUS * 1.5;
+    double t = primaryState().t;
+    auto ecefAxis = [&](Vec3 v) { return ToView(eci_to_ecef(v, t)); };
     LineVertex ax[6] = {
-        { ToView({-L, 0, 0}), kRed },   { ToView({L, 0, 0}), kRed },
-        { ToView({0, -L, 0}), kGreen }, { ToView({0, L, 0}), kGreen },
-        { ToView({0, 0, -L}), kBlue },  { ToView({0, 0, L}), kBlue },
+        { ecefAxis({-L, 0, 0}), kRed },   { ecefAxis({L, 0, 0}), kRed },
+        { ecefAxis({0, -L, 0}), kGreen }, { ecefAxis({0, L, 0}), kGreen },
+        { ecefAxis({0, 0, -L}), kBlue },  { ecefAxis({0, 0, L}), kBlue },
     };
     backend_.DrawLines(ax, 6, 2.0f);
 }
@@ -443,9 +457,10 @@ void Renderer::DrawSurfaceMarkers() const {
         backend_.DrawModel(markerSphere_, rmath::placeSphere(tipW, sphereR), m);
     };
 
+    // origin/target are body-fixed (ECEF); the whole scene renders in that frame
     for (const RocketState& st : states_) {
         pin(st.init.origin_r_eci, kGreen);   // launch origin
-        pin(st.init.target_r_eci, kRed);     // intended target
+        pin(st.init.target_r_ecef, kRed);    // intended target
     }
     backend_.DrawLines(stalks.data(), stalks.size(), 2.0f);
 }
@@ -505,7 +520,7 @@ void Renderer::DrawTelemetry() const {
     row("Mass",       fmt("%8.1f kg", mass),      kWhite);
     row("Propellant", fmt("%8.1f kg", fuel),      fuel < 50.0 ? kRed : kGreen);
 
-    header("ECI POSITION (km)");
+    header("ECEF POSITION (km)");
     row("X",  fmt("%+12.3f", r.x * M_TO_KM), kWhite);
     row("Y",  fmt("%+12.3f", r.y * M_TO_KM), kWhite);
     row("Z",  fmt("%+12.3f", r.z * M_TO_KM), kWhite);

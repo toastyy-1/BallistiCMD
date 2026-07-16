@@ -51,7 +51,7 @@ FCInitState FlightController::create_target_trajectory(double lat_target, double
         EARTH_RADIUS * cos(lat_origin) * sin(long_origin),
         EARTH_RADIUS * sin(lat_origin)
     };
-    out.r_target = {
+    out.r_target_ecef = {
         EARTH_RADIUS * cos(lat_target) * cos(long_target),
         EARTH_RADIUS * cos(lat_target) * sin(long_target),
         EARTH_RADIUS * sin(lat_target)
@@ -101,11 +101,12 @@ void FlightController::init(Rocket& r, double current_time) {
     cs.stage = ARMED;
     cs.time = current_time;
 
-    double tgt_lat = asin(r.start_state.target_r_eci.z / r.start_state.target_r_eci.norm()) * RAD_TO_DEG;
-    double tgt_long = atan2(r.start_state.target_r_eci.y, r.start_state.target_r_eci.x) * RAD_TO_DEG;
+    double tgt_lat = asin(r.start_state.target_r_ecef.z / r.start_state.target_r_ecef.norm()) * RAD_TO_DEG;
+    double tgt_long = atan2(r.start_state.target_r_ecef.y, r.start_state.target_r_ecef.x) * RAD_TO_DEG;
     cs.is = create_target_trajectory(tgt_lat, tgt_long, r);
 
     cs.r = cs.is.r_origin; // set initial r to starting r
+    cs.v = surface_velocity_eci(cs.r); // pad rotates with earth
     cs.att = cs.is.q_origin; // set initial orientation
     cs.target_att = cs.is.q_origin;
     countdown_start = current_time;
@@ -325,7 +326,7 @@ void FlightController::flight_controller_process(Rocket& r, double current_time)
             cs.stage = STAGE_1;
         }
         
-        cs.v = {0, 0, 0}; // do this because the integrator doesnt account for the normal force so it thinks the rocket moves when sitting on pad
+        cs.v = surface_velocity_eci(cs.r); // set to pad velocity because the integrator doesnt account for the normal force so it thinks the rocket moves when sitting on pad
         break;
     case STAGE_1: {
         s1_powered();

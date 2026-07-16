@@ -3,8 +3,14 @@
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // S1 GUIDANCE
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// rough init tof guess
+constexpr double NOMINAL_TOF = 1500.0; // seconds
+
 void FlightController::s1_powered() {
     double dt = cs.time - cs.stage_burn_time_start;
+
+    // aim at where the target will roughly be at arrival
+    Vec3 r_target = target_eci_at_time_of_arrival(cs.time + NOMINAL_TOF);
 
     ///////////////////////////////////////////////////////////////////////////
     // do initial turn towards target before gravity turn starts
@@ -16,7 +22,7 @@ void FlightController::s1_powered() {
         Vec3 up = cs.r.normalized();
 
         // direction towards the target in the plane perpendicular to the rockets starting up point
-        Vec3 downrange_from_origin = cs.is.r_target - cs.is.r_origin;
+        Vec3 downrange_from_origin = r_target - cs.is.r_origin;
         downrange_from_origin = (downrange_from_origin - up * downrange_from_origin.dot(up)).normalized();
 
         // turned slightly
@@ -29,7 +35,7 @@ void FlightController::s1_powered() {
     ///////////////////////////////////////////////////////////////////////////
     else {
         // align with plane connecting to target and blend with current velocity vector
-        Vec3 n = cs.is.r_origin.cross(cs.is.r_target).normalized();
+        Vec3 n = cs.is.r_origin.cross(r_target).normalized();
         Vec3 v_in_target_plane = cs.v - n * cs.v.dot(n);
         cs.target_att = quat_from_vec(v_in_target_plane.normalized());
     }
@@ -128,6 +134,12 @@ void FlightController::s2_powered() {
 
     Vec3& v_req = cs.s2_v_req; // optimal required velocity
 
+    // aim at where the target will be after tof of earth spin
+    auto v_req_for_tof = [&](double tof) {
+        return lambert(cs.r, target_eci_at_time_of_arrival(cs.time + tof), tof);
+    };
+    auto dv = [&](double tof) { return (v_req_for_tof(tof) - cs.v).norm(); };
+
     ////////////////////////////////////////////////////////////
     // determine the minimum rquired velocity
     ////////////////////////////////////////////////////////////
@@ -135,20 +147,20 @@ void FlightController::s2_powered() {
         cs.s2_lambert_counter = 0; // reset counter
 
         ////////////////////////////////////////////////////////////////////////////////////////
-        // use golden section search to find the optimal required velocity vector using lambert problem 
+        // use golden section search to find the optimal required velocity vector using lambert problem
         ////////////////////////////////////////////////////////////////////////////////////////
         double rho = 1 / ( (1 + sqrt(5) ) / 2);
 
         double a = 300; // lower bound of guess
         double b = 2700; // no reasonable flight should take longer than this right?
-        
+
         // pick two points based on upper and lower bounds
         double x1 = b - rho * (b - a);
         double x2 = a + rho * (b - a);
 
         // do the lambert problem on these two points (smallest change in velocity)
-        double f1 = (lambert(cs.r, cs.is.r_target, x1) - cs.v).norm();
-        double f2 = (lambert(cs.r, cs.is.r_target, x2) - cs.v).norm();
+        double f1 = dv(x1);
+        double f2 = dv(x2);
 
         // iterate on a and b to find the minimum delta v point
         while ((b - a) > 0.1) {
@@ -157,18 +169,18 @@ void FlightController::s2_powered() {
                 x2 = x1;
                 f2 = f1;
                 x1 = b - rho * (b - a);
-                f1 = (lambert(cs.r, cs.is.r_target, x1) - cs.v).norm();
+                f1 = dv(x1);
             }
             else {
                 a = x1;
                 x1 = x2;
                 f1 = f2;
                 x2 = a + rho * (b - a);
-                f2 = (lambert(cs.r, cs.is.r_target, x2) - cs.v).norm();
+                f2 = dv(x2);
             }
         }
 
-        v_req = lambert(cs.r, cs.is.r_target, 0.5 * (a + b));
+        v_req = v_req_for_tof(0.5 * (a + b));
     }
 
     // velocity to be gained as a target
@@ -231,18 +243,24 @@ void FlightController::payload_deploy() {
     ////////////////////////////////////////////////////////////////////////////////////////
     Vec3 v_req{}; // optimal required velocity
 
+    // aim at where the target will be after tof of earth spin
+    auto v_req_for_tof = [&](double tof) {
+        return lambert(cs.r, target_eci_at_time_of_arrival(cs.time + tof), tof);
+    };
+    auto dv = [&](double tof) { return (v_req_for_tof(tof) - cs.v).norm(); };
+
     double rho = 1 / ( (1 + sqrt(5) ) / 2);
 
     double a = 300; // lower bound of guess
     double b = 2700; // no reasonable flight should take longer than this right?
-    
+
     // pick two points based on upper and lower bounds
     double x1 = b - rho * (b - a);
     double x2 = a + rho * (b - a);
 
     // do the lambert problem on these two points
-    double f1 = (lambert(cs.r, cs.is.r_target, x1) - cs.v).norm();
-    double f2 = (lambert(cs.r, cs.is.r_target, x2) - cs.v).norm();
+    double f1 = dv(x1);
+    double f2 = dv(x2);
 
     // iterate on a and b to find the minimum delta v point
     while ((b - a) > 0.1) {
@@ -251,18 +269,18 @@ void FlightController::payload_deploy() {
             x2 = x1;
             f2 = f1;
             x1 = b - rho * (b - a);
-            f1 = (lambert(cs.r, cs.is.r_target, x1) - cs.v).norm();
+            f1 = dv(x1);
         }
         else {
             a = x1;
             x1 = x2;
             f1 = f2;
             x2 = a + rho * (b - a);
-            f2 = (lambert(cs.r, cs.is.r_target, x2) - cs.v).norm();
+            f2 = dv(x2);
         }
     }
 
-    v_req = lambert(cs.r, cs.is.r_target, 0.5 * (a + b));
+    v_req = v_req_for_tof(0.5 * (a + b));
 
     // velocity to be gained as a target
     Vec3 v_gain = v_req - cs.v;

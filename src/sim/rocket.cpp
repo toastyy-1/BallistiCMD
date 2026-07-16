@@ -223,6 +223,7 @@ Vec3 Rocket::calc_drag_accel() {
     Vec3 v_relative = v - v_air;
 
     double craft_speed = v_relative.norm();
+    if (craft_speed < 1e-6) return {0, 0, 0}; // no airspeed
 
     // calcualte the aoa entering into the atmosphere
     //Vec3 nose_direction = nose_direction_eci();
@@ -315,8 +316,7 @@ void Rocket::update_dynamics() {
     if (r.norm() < EARTH_RADIUS) {
         Vec3 r_hat = r.normalized();
         r = r_hat * EARTH_RADIUS;
-        v = r_hat * std::max(v.dot(r_hat), 0.0);
-
+        v = surface_velocity_eci(r) + r_hat * std::max(v.dot(r_hat), 0.0); // if touching ground move iwth earth spin
     }
 
 }
@@ -444,7 +444,7 @@ void Rocket::set_engine_orientation(Quat orientation) {
     q_engine = {std::cos(half_max), orientation.x * s, orientation.y * s, orientation.z * s};
 }
 
-static Vec3 lat_lon_to_eci(double latitude_deg, double longitude_deg) {
+static Vec3 lat_lon_to_ecef(double latitude_deg, double longitude_deg) {
     double lat = latitude_deg * M_PI / 180.0;
     double lon = longitude_deg * M_PI / 180.0;
     return {
@@ -455,14 +455,17 @@ static Vec3 lat_lon_to_eci(double latitude_deg, double longitude_deg) {
 }
 
 void Rocket::set_start(double origin_latitude, double origin_longitude, double target_latitude, double target_longitude) {
-    Vec3 origin_pos = lat_lon_to_eci(origin_latitude, origin_longitude);
+    Vec3 origin_pos = lat_lon_to_ecef(origin_latitude, origin_longitude);
 
     // set the position of the rocket to that asolute position
     start_state.origin_r_eci = origin_pos;
     set_pos(origin_pos);
 
+    // pad rotates with the earth
+    v = surface_velocity_eci(origin_pos);
+
     // set target position
-    start_state.target_r_eci = lat_lon_to_eci(target_latitude, target_longitude);
+    start_state.target_r_ecef = lat_lon_to_ecef(target_latitude, target_longitude);
 
     // determine the necessary orientation to achive normal "up" position from surface
     double lat = origin_latitude * M_PI / 180.0;

@@ -9,7 +9,7 @@
 struct RocketStartState {
     Vec3 origin_r_eci;
     Quat origin_q_eci; // origin attitude
-    Vec3 target_r_eci;
+    Vec3 target_r_ecef;
 };
 
 // snapshot of rocket state at any given moment
