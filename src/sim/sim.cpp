@@ -27,8 +27,8 @@ namespace sim {
         const double origin_center_long = -83.936084;
         const double possible_launch_site_radius = 100; //km -- the radius by which rocket launch sites will be generated randomly
 
-        const double target_lat = 50.854428;
-        const double target_long = 4.353785;
+        const double target_lat = 48.859113;
+        const double target_long = 2.345740;
 
         std::mt19937 rng(1201);
         std::uniform_real_distribution<double> r(-0.2, 0.2);

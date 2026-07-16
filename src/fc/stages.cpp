@@ -4,8 +4,7 @@
 // S1 GUIDANCE
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void FlightController::s1_powered() {
-    static double s1_start_time = cs.time;
-    double dt = cs.time - s1_start_time;
+    double dt = cs.time - cs.stage_burn_time_start;
 
     ///////////////////////////////////////////////////////////////////////////
     // do initial turn towards target before gravity turn starts
@@ -42,6 +41,7 @@ void FlightController::s1_powered() {
         cs.separate_stage_flag = true;
         cs.light_engine_flag = true;
         cs.stage = STAGE_2;
+        cs.stage_burn_time_start = cs.time;
     }
 }
 
@@ -123,18 +123,16 @@ static Vec3 lambert(Vec3 r, Vec3 r_t, double tff) {
 }
 
 void FlightController::s2_powered() {
-    static int counter = 3;
-    counter++;
-    static double burn_start_t = cs.time;
-    double burn_time = cs.time - burn_start_t;
+    cs.s2_lambert_counter++;
+    double burn_time = cs.time - cs.stage_burn_time_start;
 
-    static Vec3 v_req{}; // optimal required velocity
+    Vec3& v_req = cs.s2_v_req; // optimal required velocity
 
     ////////////////////////////////////////////////////////////
     // determine the minimum rquired velocity
     ////////////////////////////////////////////////////////////
-    if (counter >= 3) {
-        counter = 0; // reset counter
+    if (cs.s2_lambert_counter >= 3) {
+        cs.s2_lambert_counter = 0; // reset counter
 
         ////////////////////////////////////////////////////////////////////////////////////////
         // use golden section search to find the optimal required velocity vector using lambert problem 
@@ -204,6 +202,8 @@ void FlightController::s2_powered() {
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // simply operates a modified version of stage 2 that improves trajectory accuracy with small engine
 void FlightController::payload_deploy() {
+    if (cs.payload_deploy_cutoff_done) return;
+
     // initially, set rcs flag to true so we can orient rocket in right direction
     cs.rcs_activated_flag = true;
 
@@ -229,7 +229,7 @@ void FlightController::payload_deploy() {
     ////////////////////////////////////////////////////////////////////////////////////////
     // use golden section search to find the optimal required velocity vector using lambert problem 
     ////////////////////////////////////////////////////////////////////////////////////////
-    static Vec3 v_req{}; // optimal required velocity
+    Vec3 v_req{}; // optimal required velocity
 
     double rho = 1 / ( (1 + sqrt(5) ) / 2);
 
@@ -267,15 +267,20 @@ void FlightController::payload_deploy() {
     // velocity to be gained as a target
     Vec3 v_gain = v_req - cs.v;
 
-    // stop the engine if the V is within proper cutoff range
-    if (v_gain.norm() < 5.0) {
+    // cut off when the remaining v to gain is smaller than the delta v the engine will add in the next step
+    double dv_next_step = cs.a_inertial.norm() * cs.dt;
+    bool burning = dv_next_step > 0.01;
+    bool overshot = v_gain.dot(cs.a_inertial) < 0.0;
+    if (burning && (v_gain.norm() < 0.5 * dv_next_step || overshot)) {
         // stop engine to stop overshoot
         cs.cutoff_engine_flag = true;
-        std::cout << "ENGINE_CUTOFF\n";
+        std::cout << "ENGINE_CUTOFF with residual " << v_gain.norm() << " m/s\n";
         cs.rcs_activated_flag = false;
         return;
     }
 
-    // set attitude to new target
-    cs.target_att = quat_from_vec(v_gain.normalized());
+    // make rocket not demolish its trajectory when its close to v cutoff
+    if (!burning || v_gain.norm() > 3.0 * dv_next_step) {
+        cs.target_att = quat_from_vec(v_gain.normalized());
+    }
 }

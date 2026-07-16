@@ -2,7 +2,6 @@
 #include <iomanip>
 #include <cmath>
 #include <algorithm>
-#include <fstream>
 #include <random>
 #include <vector>
 #include <thread>
@@ -369,18 +368,4 @@ void FlightController::flight_controller_process(Rocket& r, double current_time)
     else {
         r.rcs_off();
     }
-
-    // log stats to csv
-    static std::ofstream fc_log("fc_log.csv");
-    static bool fc_log_header_written = false;
-    if (!fc_log_header_written) {
-        fc_log << "time,stage,r_x,r_y,r_z,v_x,v_y,v_z,a_x,a_y,a_z,w_x,w_y,w_z,att_w,att_x,att_y,att_z\n";
-        fc_log_header_written = true;
-    }
-    fc_log << cs.time << "," << cs.stage << ","
-           << cs.r.x << "," << cs.r.y << "," << cs.r.z << ","
-           << cs.v.x << "," << cs.v.y << "," << cs.v.z << ","
-           << cs.a.x << "," << cs.a.y << "," << cs.a.z << ","
-           << cs.w.x << "," << cs.w.y << "," << cs.w.z << ","
-           << cs.att.w << "," << cs.att.x << "," << cs.att.y << "," << cs.att.z << "\n";
 }
