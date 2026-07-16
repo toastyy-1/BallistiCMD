@@ -6,6 +6,7 @@
 #include <thread>
 #include <chrono>
 #include "constants.hpp"
+#include <random>
 
 
 namespace sim {
@@ -16,13 +17,29 @@ namespace sim {
     Sim::~Sim() {}
 
     void Sim::Run() {
+        // array that holds all the rockets
         std::vector<Rocket> rocket_list = {};
 
-        Rocket r1{35.948416, -83.936084, 81.093395, -63.211146};
-        Rocket r2{-35.948416, -83.936084, 81.093395, -63.211146};
+        ///////////////////////////////////////////////////////////////////////////////////////////////
+        // rocket placement process                                                                  //
+        ///////////////////////////////////////////////////////////////////////////////////////////////
+        const double origin_center_lat = 35.948416;
+        const double origin_center_long = -83.936084;
+        const double possible_launch_site_radius = 100; //km -- the radius by which rocket launch sites will be generated randomly
 
-        rocket_list.push_back(r1);
-        rocket_list.push_back(r2);
+        const double target_lat = 50.854428;
+        const double target_long = 4.353785;
+
+        std::mt19937 rng(1201);
+        std::uniform_real_distribution<double> r(-0.2, 0.2);
+
+        for (int i = 0; i < 15; i++) {
+            double start_lat_gen = origin_center_lat * (1 + r(rng));
+            double start_long_gen = origin_center_long * (1 + r(rng));
+
+            Rocket new_rocket{start_lat_gen, start_long_gen, target_lat, target_long};
+            rocket_list.push_back(new_rocket);
+        }
 
         // configure the rocket for starting settings
         publish_sim_states(rocket_list);

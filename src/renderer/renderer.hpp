@@ -100,16 +100,15 @@ private:
     // states_; reset when the rocket count changes.
     std::vector<std::vector<Vec3>> trails_;
 
-    // Overlay visibility, toggled by number keys 1-8 (see HandleInput). All on by
-    // default so the initial view matches the pre-toggle behaviour.
-    bool showTrails_         = true;   // 1
-    bool showPredicted_      = true;   // 2
-    bool showBodyAxes_       = true;   // 3
-    bool showStateVectors_   = true;   // 4
-    bool showSurfaceMarkers_ = true;   // 5
-    bool showEciAxes_        = true;   // 6
-    bool showLabels_         = true;   // 7
-    bool showTelemetry_      = true;   // 8
+    // Overlay visibility, toggled by number keys 1-6 (see HandleInput). The
+    // essentials default on; the debug helpers (axes + velocity vectors) share a
+    // single toggle and default off so the initial view stays uncluttered.
+    bool showPredicted_      = true;    // 1  predicted trajectory
+    bool showTrails_         = true;    // 2  flown path
+    bool showLabels_         = true;    // 3  rocket names
+    bool showSurfaceMarkers_ = true;    // 4  targets / origin pins
+    bool showTelemetry_      = true;    // 5  telemetry HUD
+    bool showDebug_          = false;   // 6  body axes + state vectors + ECI axes
 };
 
 }

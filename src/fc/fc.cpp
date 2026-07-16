@@ -256,9 +256,11 @@ void FlightController::calculate_I() {
     Vec3 I = {0};
     double R2 = props.radius * props.radius;
 
+    const int first_stage = cs.stage < STAGE_1 ? STAGE_1 : cs.stage;
+
     // mass-weighted center of mass of the remaining stages
     double M_total = 0.0, m_CoM = 0.0, base = 0.0;
-    for (int i = cs.stage; i < ROCKET_NUM_STAGES; i++) {
+    for (int i = first_stage; i < ROCKET_NUM_STAGES; i++) {
         const Stage& st = props.stages[i];
         double m = st.m_dry + st.m_fuel;
         M_total += m;
@@ -268,7 +270,7 @@ void FlightController::calculate_I() {
     double z_cm = m_CoM / M_total;
 
     base = 0.0;
-    for (int i = cs.stage; i < ROCKET_NUM_STAGES; i++) {
+    for (int i = first_stage; i < ROCKET_NUM_STAGES; i++) {
         const Stage& s = props.stages[i]; // selected stage
         double M = s.m_dry + s.m_fuel;
         double L = s.tip_to_end_length;

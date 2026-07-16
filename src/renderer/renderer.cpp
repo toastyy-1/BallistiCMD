@@ -127,16 +127,15 @@ void Renderer::UpdateTrails() {
 void Renderer::HandleInput() {
     FrameInput in = backend_.PollInput();
 
-    // Number keys toggle overlays (1 = trails, as requested; others follow).
+    // Number keys toggle overlays. 6 groups all the debug helpers (body axes,
+    // velocity vectors, ECI axes) under one switch.
     switch (in.toggle) {
-        case 1: showTrails_         = !showTrails_;         break;
-        case 2: showPredicted_      = !showPredicted_;      break;
-        case 3: showBodyAxes_       = !showBodyAxes_;       break;
-        case 4: showStateVectors_   = !showStateVectors_;   break;
-        case 5: showSurfaceMarkers_ = !showSurfaceMarkers_; break;
-        case 6: showEciAxes_        = !showEciAxes_;        break;
-        case 7: showLabels_         = !showLabels_;         break;
-        case 8: showTelemetry_      = !showTelemetry_;      break;
+        case 1: showPredicted_      = !showPredicted_;      break;
+        case 2: showTrails_         = !showTrails_;         break;
+        case 3: showLabels_         = !showLabels_;         break;
+        case 4: showSurfaceMarkers_ = !showSurfaceMarkers_; break;
+        case 5: showTelemetry_      = !showTelemetry_;      break;
+        case 6: showDebug_          = !showDebug_;          break;
         default: break;
     }
 
@@ -203,9 +202,9 @@ void Renderer::DrawFrame(const RCamera& cam) {
     backend_.BeginFrame(kBlack);
     backend_.Begin3D(cam);
         DrawEarth(cam, earthC);
-        if (showEciAxes_)        DrawECIAxes();
-        if (showBodyAxes_)       DrawBodyAxes();
-        if (showStateVectors_)   DrawStateVectors();
+        if (showDebug_)          DrawECIAxes();
+        if (showDebug_)          DrawBodyAxes();
+        if (showDebug_)          DrawStateVectors();
         if (showSurfaceMarkers_) DrawSurfaceMarkers();
         if (showPredicted_)      DrawPredictedTrajectory();
         if (showTrails_)         DrawTrails();
@@ -584,14 +583,12 @@ void Renderer::DrawOverlayLegend() const {
     // Bottom-left legend of the number-key toggles. Doubles as documentation: an
     // entry is lit (lime) when its overlay is on, dim (grey) when off.
     const struct { int key; const char* name; bool on; } items[] = {
-        { 1, "Trails",       showTrails_ },
-        { 2, "Predicted",    showPredicted_ },
-        { 3, "Body axes",    showBodyAxes_ },
-        { 4, "Vectors",      showStateVectors_ },
-        { 5, "Pins",         showSurfaceMarkers_ },
-        { 6, "ECI axes",     showEciAxes_ },
-        { 7, "Labels",       showLabels_ },
-        { 8, "Telemetry",    showTelemetry_ },
+        { 1, "Trajectory",   showPredicted_ },
+        { 2, "Path",         showTrails_ },
+        { 3, "Labels",       showLabels_ },
+        { 4, "Pins",         showSurfaceMarkers_ },
+        { 5, "Telemetry",    showTelemetry_ },
+        { 6, "Debug",        showDebug_ },
     };
     const int n  = (int)(sizeof(items) / sizeof(items[0]));
     const int fs = 14, lh = 16;
