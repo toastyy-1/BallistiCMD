@@ -144,7 +144,7 @@ void FlightController::s2_powered() {
     ////////////////////////////////////////////////////////////
     // determine the minimum rquired velocity
     ////////////////////////////////////////////////////////////
-    if (cs.s2_lambert_counter >= 3) {
+    if (cs.s2_lambert_counter >= cs.s2_lambert_counter_reset_num) {
         cs.s2_lambert_counter = 0; // reset counter
 
         ////////////////////////////////////////////////////////////////////////////////////////
@@ -253,7 +253,7 @@ void FlightController::payload_deploy() {
     auto dv = [&](double tof) { return (v_req_for_tof(tof) - cs.v).norm(); };
 
     // only run the search every few steps
-    if (cs.s3_lambert_counter >= 3) {
+    if (cs.s3_lambert_counter >= cs.s3_lambert_counter_reset_num) {
         cs.s3_lambert_counter = 0; // reset counter
 
         double rho = 1 / ( (1 + sqrt(5) ) / 2);

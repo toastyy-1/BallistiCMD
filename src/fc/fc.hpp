@@ -50,10 +50,12 @@ struct ControlStates {
     double time;
     double stage_burn_time_start; // mission time the current stage's engine was lit
 
-    int s2_lambert_counter = 5; // makes v_req be computed every n steps
+    int s2_lambert_counter = 0; // makes v_req be computed every n steps
+    int s2_lambert_counter_reset_num = 3; // resets counter every n times
     Vec3 s2_v_req{}; // optimal required velocity
 
-    int s3_lambert_counter = 5; // makes v_req be computed every n steps
+    int s3_lambert_counter = 0; // makes v_req be computed every n steps
+    int s3_lambert_counter_reset_num = 3;
     Vec3 s3_v_req{}; // optimal required velocity
 
     bool rcs_activated_flag = false; // set to true if you want the RCS system to try and point the rocket to target_att

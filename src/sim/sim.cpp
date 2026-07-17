@@ -35,7 +35,7 @@ namespace sim {
         std::uniform_real_distribution<double> ro(-0.2, 0.2);
         std::uniform_real_distribution<double> rt(-0.2, 0.2);
 
-        for (int i = 0; i < 100; i++) {
+        for (int i = 0; i < 10; i++) {
             double start_lat_gen = origin_center_lat * (1 + ro(rng));
             double start_long_gen = origin_center_long * (1 + ro(rng));
 
@@ -76,7 +76,7 @@ namespace sim {
             // make snapshot for other threads of sim states
             publish_sim_states(rocket_list);
 
-            std::this_thread::sleep_for(std::chrono::duration<double>(0.01));
+            //std::this_thread::sleep_for(std::chrono::duration<double>(0.01));
         }
 
         write_results_csv(rocket_list);
