@@ -34,7 +34,7 @@ namespace sim {
         std::uniform_real_distribution<double> ro(-0.01, 0.01);
         std::uniform_real_distribution<double> rt(-0.2, 0.2);
 
-        for (int i = 0; i < 5000; i++) {
+        for (int i = 0; i < 396; i++) {
             double start_lat_gen = origin_center_lat * (1 + ro(rng));
             double start_long_gen = origin_center_long * (1 + ro(rng));
 
