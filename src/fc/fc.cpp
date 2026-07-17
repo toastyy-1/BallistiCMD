@@ -341,7 +341,12 @@ void FlightController::flight_controller_process(Rocket& r, double current_time)
     }
 
     // check if the engine was supposed to be cut off
-    if (cs.cutoff_engine_flag) {
+    if (cs.final_burn_flag) {
+        cs.final_burn_flag = false;
+        // fractional burn (burn that is sub step to time step)
+        r.command_final_burn_fraction(cs.final_burn_fraction);
+    }
+    else if (cs.cutoff_engine_flag) {
         cs.cutoff_engine_flag = false;
         r.cutoff_engine();
     }

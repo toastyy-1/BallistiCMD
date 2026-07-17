@@ -1,5 +1,6 @@
 #include "fc.hpp"
 #include <iostream>
+#include <algorithm>
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // S1 GUIDANCE
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -190,7 +191,7 @@ void FlightController::s2_powered() {
     // the cutoff should be tied to the max possible delta V of the 3rd stage engine
     double next_delta_v = props.stages[2].isp * g0 * log((props.stages[2].m_dry + props.stages[2].m_fuel) / props.stages[2].m_dry);
     double estimated_s2_burn_time = props.stages[1].m_fuel / (props.stages[1].max_mass_flow_rate());
-    if (v_gain.norm() < next_delta_v - 0.2 * next_delta_v || burn_time > estimated_s2_burn_time) { // within 20% for margin of error, or motor depleted
+    if (v_gain.norm() < next_delta_v - 0.5 * next_delta_v || burn_time > estimated_s2_burn_time) { // within 20% for margin of error, or motor depleted
         // stop engine to stop overshoot
         cs.cutoff_engine_flag = true;
         std::cout << "ENGINE_CUTOFF at " << v_gain.norm() << "m/s " << "with next stage having delta v: " << next_delta_v << "m/s\n";
@@ -215,6 +216,8 @@ void FlightController::s2_powered() {
 // simply operates a modified version of stage 2 that improves trajectory accuracy with small engine
 void FlightController::payload_deploy() {
     if (cs.payload_deploy_cutoff_done) return;
+
+    cs.s3_lambert_counter++;
 
     // initially, set rcs flag to true so we can orient rocket in right direction
     cs.rcs_activated_flag = true;
@@ -241,7 +244,7 @@ void FlightController::payload_deploy() {
     ////////////////////////////////////////////////////////////////////////////////////////
     // use golden section search to find the optimal required velocity vector using lambert problem 
     ////////////////////////////////////////////////////////////////////////////////////////
-    Vec3 v_req{}; // optimal required velocity
+    Vec3& v_req = cs.s3_v_req; // optimal required velocity
 
     // aim at where the target will be after tof of earth spin
     auto v_req_for_tof = [&](double tof) {
@@ -249,38 +252,43 @@ void FlightController::payload_deploy() {
     };
     auto dv = [&](double tof) { return (v_req_for_tof(tof) - cs.v).norm(); };
 
-    double rho = 1 / ( (1 + sqrt(5) ) / 2);
+    // only run the search every few steps
+    if (cs.s3_lambert_counter >= 3) {
+        cs.s3_lambert_counter = 0; // reset counter
 
-    double a = 300; // lower bound of guess
-    double b = 2700; // no reasonable flight should take longer than this right?
+        double rho = 1 / ( (1 + sqrt(5) ) / 2);
 
-    // pick two points based on upper and lower bounds
-    double x1 = b - rho * (b - a);
-    double x2 = a + rho * (b - a);
+        double a = 300; // lower bound of guess
+        double b = 2700; // no reasonable flight should take longer than this right?
 
-    // do the lambert problem on these two points
-    double f1 = dv(x1);
-    double f2 = dv(x2);
+        // pick two points based on upper and lower bounds
+        double x1 = b - rho * (b - a);
+        double x2 = a + rho * (b - a);
 
-    // iterate on a and b to find the minimum delta v point
-    while ((b - a) > 0.1) {
-        if (f1 < f2) {
-            b = x2;
-            x2 = x1;
-            f2 = f1;
-            x1 = b - rho * (b - a);
-            f1 = dv(x1);
+        // do the lambert problem on these two points
+        double f1 = dv(x1);
+        double f2 = dv(x2);
+
+        // iterate on a and b to find the minimum delta v point
+        while ((b - a) > 0.1) {
+            if (f1 < f2) {
+                b = x2;
+                x2 = x1;
+                f2 = f1;
+                x1 = b - rho * (b - a);
+                f1 = dv(x1);
+            }
+            else {
+                a = x1;
+                x1 = x2;
+                f1 = f2;
+                x2 = a + rho * (b - a);
+                f2 = dv(x2);
+            }
         }
-        else {
-            a = x1;
-            x1 = x2;
-            f1 = f2;
-            x2 = a + rho * (b - a);
-            f2 = dv(x2);
-        }
+
+        v_req = v_req_for_tof(0.5 * (a + b));
     }
-
-    v_req = v_req_for_tof(0.5 * (a + b));
 
     // velocity to be gained as a target
     Vec3 v_gain = v_req - cs.v;
@@ -288,12 +296,21 @@ void FlightController::payload_deploy() {
     // cut off when the remaining v to gain is smaller than the delta v the engine will add in the next step
     double dv_next_step = cs.a_inertial.norm() * cs.dt;
     bool burning = dv_next_step > 0.01;
-    bool overshot = v_gain.dot(cs.a_inertial) < 0.0;
-    if (burning && (v_gain.norm() < 0.5 * dv_next_step || overshot)) {
-        // stop engine to stop overshoot
-        cs.cutoff_engine_flag = true;
-        std::cout << "ENGINE_CUTOFF with residual " << v_gain.norm() << " m/s\n";
+
+    // remaining delta v projected onto the thrust axis
+    double v_needed = v_gain.dot(cs.a_inertial.normalized());
+
+    // once a single full step would meet or pass the target, burn only the needed
+    // fraction of this step and then cut off
+    // we do this because there is a coarse time step and the burn cuttoff always falls somewhere between
+    // time step increments, so this allows us to burn in between that by interpolation (epic sigma0)
+    if (burning && v_needed < dv_next_step) {
+        double frac = std::clamp(v_needed / dv_next_step, 0.0, 1.0);
+        cs.final_burn_fraction = frac;
+        cs.final_burn_flag = true;
         cs.rcs_activated_flag = false;
+        cs.payload_deploy_cutoff_done = true;
+        std::cout << "ENGINE_CUTOFF (frac " << frac << ") residual " << (v_needed - frac * dv_next_step) << " m/s\n";
         return;
     }
 

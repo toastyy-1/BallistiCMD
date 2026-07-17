@@ -3,7 +3,7 @@
 #include <cmath>
 
 // GLOBAL TIME STEP FOR SIMULATION AND SUCH THINGS
-constexpr double TIME_STEP = 0.1; // seconds
+constexpr double TIME_STEP = 0.01; // seconds
 
 // Math
 constexpr double TAU        = 6.28318530717958647692;
