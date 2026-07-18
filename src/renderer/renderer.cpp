@@ -107,6 +107,10 @@ void Renderer::Run() {
         UpdateThrustLevels();
         UpdateTrails();
         DrawFrame(BuildCamera());
+        // First completed frame => the backend has loaded its textures (ensureEarth
+        // runs inside the first DrawEarth). Signal any thread waiting on IsInitialized().
+        if (!initialized_.load(std::memory_order_relaxed))
+            initialized_.store(true, std::memory_order_release);
     }
 }
 
