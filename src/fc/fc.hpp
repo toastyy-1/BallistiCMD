@@ -50,13 +50,20 @@ struct ControlStates {
     double time;
     double stage_burn_time_start; // mission time the current stage's engine was lit
 
-    int s2_lambert_counter = 3; // makes v_req be computed every n steps
+    int s2_lambert_counter = 0; // makes v_req be computed every n steps
+    int s2_lambert_counter_reset_num = 3; // resets counter every n times
     Vec3 s2_v_req{}; // optimal required velocity
+
+    int s3_lambert_counter = 0; // makes v_req be computed every n steps
+    int s3_lambert_counter_reset_num = 3;
+    Vec3 s3_v_req{}; // optimal required velocity
 
     bool rcs_activated_flag = false; // set to true if you want the RCS system to try and point the rocket to target_att
     bool light_engine_flag = false; // set to true if you want to light the engine on that step
     bool separate_stage_flag = false; // set to true if you want to separate stage on that step
     bool cutoff_engine_flag = false; // set to true if you want to permanently cut off the engine on that step
+    bool final_burn_flag = false; // set to true to burn only final_burn_fraction of this step, then cut off
+    double final_burn_fraction = 1.0; // fraction of a full step to burn before the sub step cutoff
     bool payload_deploy_cutoff_done = false; // set once payload_deploy has cut the engine
 
     // initial states

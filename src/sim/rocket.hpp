@@ -51,6 +51,7 @@ class Rocket {
     void update_rotation();
     void update_mass();
     void update_flight_controller(double current_time) {
+        if (pending_cutoff) { active().thrust = 0.0; pending_cutoff = false; } // process engine sub step cutoff (direction from fc)
         if (!fc) fc.emplace(*this, current_time); // loads rocket config into the FC on first run
         fc->flight_controller_process(*this, current_time);
     }
@@ -58,6 +59,7 @@ class Rocket {
     // used by flight controller
     void light_engine(); // should be used once per stage
     void cutoff_engine();
+    void command_final_burn_fraction(double fraction); 
     bool advance_stage();
     void set_engine_orientation(Quat orientation);
     void rcs_on() { rcs_active = true; } // enable or disable rcs orientation correction
@@ -87,6 +89,7 @@ class Rocket {
     ///////////////////////////////////////////////////////////////////////////////////////////////
     int active_idx = 0;         // index of the currently active stage
     bool engine_locked = false; // once cut off, the active stage's motor cannot be relit until staged away
+    bool pending_cutoff = false; // a sub-step burn is finishing; thrust is zeroed at the start of the next step
 
     // mass properties
     double m_current = 0;       // current total mass (kg)

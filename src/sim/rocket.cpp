@@ -109,6 +109,20 @@ void Rocket::cutoff_engine() {
 }
 
 /**
+ * burns a fraction of a full steps worth of thrust this step, then cuts off next step
+ * TREAT THIS LIKE A DEV FEATURE -- this type of thing isnt real irl so kind of ignore it
+ * when analysing the program to learn about guidance shit. this is only to make the rocket
+ * fc think that time is infinitely coarse instead of whatever TIME_STEP is (I hope ts makes sense)
+ */
+void Rocket::command_final_burn_fraction(double fraction) {
+    if (engine_locked) return;
+    fraction = std::clamp(fraction, 0.0, 1.0);
+    active().thrust = fraction * active().max_thrust;
+    engine_locked = true;  // no relight
+    pending_cutoff = true; // thrust zeroed at the start of the next step
+}
+
+/**
  * tells the RCS system that it should apply a moment to the center of mass of the rocket body according to the input
  * if the applied moment is greater than possible by the RCS system it will just max out the moments
  */
