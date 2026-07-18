@@ -325,7 +325,7 @@ void BgfxBackend::Shutdown() {
     for (auto& m : meshes_) { if (bgfx::isValid(m.vbh)) bgfx::destroy(m.vbh); if (bgfx::isValid(m.ibh)) bgfx::destroy(m.ibh); }
     for (auto& t : textures_) if (bgfx::isValid(t)) bgfx::destroy(t);
     if (bgfx::isValid(earthColor_)) bgfx::destroy(earthColor_);
-    if (bgfx::isValid(earthBump_))  bgfx::destroy(earthBump_);
+    earthBump_.Destroy();
     if (bgfx::isValid(earthNight_)) bgfx::destroy(earthNight_);
     if (bgfx::isValid(earthCloud_)) bgfx::destroy(earthCloud_);
     if (bgfx::isValid(earthRough_)) bgfx::destroy(earthRough_);
@@ -607,7 +607,7 @@ void BgfxBackend::ensureEarth() {
         return th;
     };
     earthColor_ = loadDDS("src/renderer/bgfx/Earth-Color-Map-32768x16384.dds");
-    earthBump_  = loadDDS("src/renderer/bgfx/Earth-Bump-Map-32768x16384.dds");
+    earthBump_.Load("src/renderer/bgfx/Earth-Bump-Map-32768x16384.dds");
     earthNight_ = loadDDS("src/renderer/bgfx/Earth-Night-Map-32768x16384.dds");
     earthEmiss_ = loadDDS("src/renderer/bgfx/Earth-Night-Emission-Map-32768x16384.dds");  // white = light source strength
     earthCloud_ = loadDDS("src/renderer/bgfx/Earth-Cloud-Map-32768x16384.dds");
@@ -684,12 +684,12 @@ void BgfxBackend::DrawEarth(const EarthFrame& f) {
     setVec4(u_sunDir_,      f.sun_dir);
     setVec4(u_earthCenter_, f.center);
     setVec4(u_camPos_,      f.cam_pos);
-    float disp[4] = { 8849.0f, 0, 0, 0 };    // true scale: Everest above sea level (m)
+    float disp[4] = { (float)EarthBumpMap::kMaxElevation, 0, 0, 0 };  // Everest above sea level (m)
     bgfx::setUniform(u_dispScale_, disp);
     float depth[4] = { far_, 0, 0, 0 };
     bgfx::setUniform(u_depth_, depth);
     bgfx::setTexture(0, s_color_, earthColor_);
-    bgfx::setTexture(1, s_bump_,  earthBump_);   // also read by the vertex shader
+    bgfx::setTexture(1, s_bump_,  earthBump_.Texture());
     bgfx::setTexture(2, s_night_, earthNight_);
     bgfx::setTexture(3, s_rough_, earthRough_);
     bgfx::setTexture(4, s_cloud_, earthCloud_);  // cloud shadows on the ground
