@@ -6,6 +6,7 @@
 #include <thread>
 #include <chrono>
 #include "constants.hpp"
+#include "renderer/bgfx/earth_bump_map.hpp"
 #include <random>
 #include <fstream>
 
@@ -20,6 +21,9 @@ namespace sim {
     void Sim::Run() {
         // array that holds all the rockets
         std::vector<Rocket> rocket_list = {};
+
+        // load topography
+        renderer::EarthBumpMap topo;
 
         ///////////////////////////////////////////////////////////////////////////////////////////////
         // rocket placement process                                                                  //

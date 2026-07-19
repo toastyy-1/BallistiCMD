@@ -9,7 +9,7 @@ RAYLIB_ARCH := -march=native
 TARGET      := program
 
 # --- bgfx backend (`make bgfx`) ---
-BGFX_SRCS   := src/renderer/bgfx/bgfx_backend.cpp src/renderer/bgfx/models.cpp
+BGFX_SRCS   := src/renderer/bgfx/bgfx_backend.cpp src/renderer/bgfx/models.cpp src/renderer/bgfx/earth_bump_map.cpp
 BGFX_ARCH   := -mtune=native
 BGFX_TARGET := program-bgfx
 BGFX_DIR    := build/bgfx

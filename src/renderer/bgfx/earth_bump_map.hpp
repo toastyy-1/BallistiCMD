@@ -17,13 +17,13 @@ public:
     bool Valid() const { return !heights_.empty(); }
     bgfx::TextureHandle Texture() const { return tex_; }
 
-    double SurfaceRadius(const Vec3& r) const;
+    double SurfaceRadius3D(const Vec3& r) const;
 
     double Altitude(const Vec3& eci_m) const;
 
     double Elevation(const Vec3& r) const;
 
-    double SurfaceRadius(double lat_deg, double lon_deg) const;
+    double SurfaceRadius2D(double lat_deg, double lon_deg) const;
 
 private:
     double sampleHeight01(const Vec3& r) const;

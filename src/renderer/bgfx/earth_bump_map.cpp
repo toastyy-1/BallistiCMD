@@ -106,20 +106,20 @@ double EarthBumpMap::Elevation(const Vec3& r) const {
     return sampleHeight01(r) * kMaxElevation;
 }
 
-double EarthBumpMap::SurfaceRadius(const Vec3& r) const {
+double EarthBumpMap::SurfaceRadius3D(const Vec3& r) const {
     return EARTH_RADIUS + Elevation(r);
 }
 
-double EarthBumpMap::SurfaceRadius(double lat_deg, double lon_deg) const {
+double EarthBumpMap::SurfaceRadius2D(double lat_deg, double lon_deg) const {
     double lat = lat_deg * (M_PI / 180.0);
     double lon = lon_deg * (M_PI / 180.0);
     double cl = std::cos(lat);
     Vec3 dir{ cl * std::cos(lon), cl * std::sin(lon), std::sin(lat) };
-    return SurfaceRadius(dir);
+    return SurfaceRadius3D(dir);
 }
 
 double EarthBumpMap::Altitude(const Vec3& eci_m) const {
-    return eci_m.norm() - SurfaceRadius(eci_m);
+    return eci_m.norm() - SurfaceRadius3D(eci_m);
 }
 
 }
