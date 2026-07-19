@@ -11,6 +11,12 @@ class EarthBumpMap {
 public:
     static constexpr double kMaxElevation = 8849.0;
 
+    static EarthBumpMap& Get() { static EarthBumpMap s; return s; }
+
+    EarthBumpMap() = default;
+    EarthBumpMap(const EarthBumpMap&) = delete;
+    EarthBumpMap& operator=(const EarthBumpMap&) = delete;
+
     void Load(const char* path);
     void Destroy();
 
