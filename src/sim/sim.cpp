@@ -6,7 +6,6 @@
 #include <thread>
 #include <chrono>
 #include "constants.hpp"
-#include "renderer/bgfx/earth_bump_map.hpp"
 #include <random>
 #include <fstream>
 
@@ -18,19 +17,20 @@ namespace sim {
     }
     Sim::~Sim() {}
 
-    void Sim::Run() {
+    void Sim::Run(std::function<bool()> renderer_ready) {
+        // wait for the renderer to load terrain before placing rockets
+        while (running.load() && renderer_ready && !renderer_ready()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+
         // array that holds all the rockets
         std::vector<Rocket> rocket_list = {};
-
-        // load topography
-        renderer::EarthBumpMap topo;
 
         ///////////////////////////////////////////////////////////////////////////////////////////////
         // rocket placement process                                                                  //
         ///////////////////////////////////////////////////////////////////////////////////////////////
         const double origin_center_lat = 48.209;
         const double origin_center_long = -101.406;
-        const double possible_launch_site_radius = 100; //km -- the radius by which rocket launch sites will be generated randomly
 
         const double target_center_lat = 53.9;
         const double target_center_long = 43.3;
@@ -70,7 +70,7 @@ namespace sim {
 
                 // update the position, orientation, and mass of the rocket
                 rocket_list[i].update_mass();
-                rocket_list[i].update_dynamics();
+                rocket_list[i].update_dynamics(t);
                 rocket_list[i].update_rotation();
             }
 
@@ -80,7 +80,7 @@ namespace sim {
             // make snapshot for other threads of sim states
             publish_sim_states(rocket_list);
 
-            //std::this_thread::sleep_for(std::chrono::duration<double>(0.01));
+            std::this_thread::sleep_for(std::chrono::duration<double>(0.01));
         }
 
         write_results_csv(rocket_list);

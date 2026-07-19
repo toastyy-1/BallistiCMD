@@ -250,7 +250,7 @@ Vec3 Rocket::calc_drag_accel() {
     return v_relative * (-drag_mag / (m_current * craft_speed));
 }
 
-void Rocket::update_dynamics() {
+void Rocket::update_dynamics(double current_time) {
     // rocket mass
     double m = m_current;
 
@@ -327,10 +327,14 @@ void Rocket::update_dynamics() {
     altitude = r_norm - EARTH_RADIUS;
 
     // keep rocket from falling through the earth
-    if (r.norm() < EARTH_RADIUS) {
-        Vec3 r_hat = r.normalized();
-        r = r_hat * EARTH_RADIUS;
-        v = surface_velocity_eci(r) + r_hat * std::max(v.dot(r_hat), 0.0); // if touching ground move iwth earth spin
+    double alt_eci = r.norm();
+    if (alt_eci <= topo.kMaxElevation + EARTH_RADIUS) {
+        double surface_alt_eci = topo.SurfaceRadius3D(eci_to_ecef(r, current_time));
+        if (alt_eci < surface_alt_eci) {
+            Vec3 r_hat = r.normalized();
+            r = r_hat * surface_alt_eci;
+            v = surface_velocity_eci(r) + r_hat * std::max(v.dot(r_hat), 0.0); // if touching ground move iwth earth spin
+        }
     }
 
 }
@@ -458,13 +462,14 @@ void Rocket::set_engine_orientation(Quat orientation) {
     q_engine = {std::cos(half_max), orientation.x * s, orientation.y * s, orientation.z * s};
 }
 
-static Vec3 lat_lon_to_ecef(double latitude_deg, double longitude_deg) {
+Vec3 Rocket::lat_lon_to_ecef(double latitude_deg, double longitude_deg) {
     double lat = latitude_deg * M_PI / 180.0;
     double lon = longitude_deg * M_PI / 180.0;
+    double alt = topo.SurfaceRadius2D(latitude_deg, longitude_deg);
     return {
-        .x = EARTH_RADIUS * cos(lat) * cos(lon),
-        .y = EARTH_RADIUS * cos(lat) * sin(lon),
-        .z = EARTH_RADIUS * sin(lat)
+        .x = alt * cos(lat) * cos(lon),
+        .y = alt * cos(lat) * sin(lon),
+        .z = alt * sin(lat)
     };
 }
 

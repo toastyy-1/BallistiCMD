@@ -10,7 +10,6 @@
 
 int main() {
     sim::Sim s;
-    std::thread sim_thread([&]{ s.Run(); });
 
 #ifdef USE_BGFX
     renderer::BgfxBackend backend;   // make bgfx
@@ -18,6 +17,8 @@ int main() {
     renderer::RaylibBackend backend; // make
 #endif
     renderer::Renderer r(backend, s);
+
+    std::thread sim_thread([&]{ s.Run([&]{ return r.IsInitialized(); }); });
     r.Run();
 
     s.Stop();

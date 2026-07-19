@@ -44,7 +44,7 @@ void appendBell(Mesh& m, float zT, float zE, float rT, float rE,
 }
 
 bool sameDims(const RocketDims& a, const RocketDims& b) {
-    return a.length == b.length && a.cm_dist == b.cm_dist &&
+    return a.length == b.length &&
            a.radius == b.radius && a.engine_dist == b.engine_dist;
 }
 
@@ -69,7 +69,6 @@ void RocketModel::Ensure(RenderBackend& b, const RocketDims& dims) {
 
 RocketModel::HullBell RocketModel::buildHullBell(RenderBackend& b, const RocketDims& d) const {
     const float L      = (float)d.length;
-    const float cm     = (float)d.cm_dist;
     const float radius = (float)d.radius;
 
     const RColor kBody   = { 226, 229, 235, 255 };  // brushed silver
@@ -77,12 +76,13 @@ RocketModel::HullBell RocketModel::buildHullBell(RenderBackend& b, const RocketD
     const RColor kCollar = {  74,  80,  92, 255 };  // gunmetal collar
     const RColor kBell   = {  46,  47,  53, 255 };  // dark nozzle
 
-    // Body frame: +Z = nose, CM at the origin. Nose tip is fixed at z = cm; the
-    // nose has a *fixed* length so the tip stays the same size across staging.
-    const float nose_z   = cm;
+    // Body frame: +Z = nose, nose tip fixed at the origin (cm-independent so the
+    // mesh caches per stage). Draw slides it by cm_dist to seat the CoM at st.r.
+    // The nose has a *fixed* length so the tip stays the same size across staging.
+    const float nose_z   = 0.0f;
     const float noseLen  = fminf(radius * 2.8f, 0.6f * L);
     const float nose_base = nose_z - noseLen;
-    const float tail_z   = cm - L;
+    const float tail_z   = nose_z - L;
 
     // PBR params (metallic, roughness) are packed into vertex UVs per part.
     auto setMR = [](Mesh& m, size_t from, float metal, float rough) {
@@ -130,8 +130,12 @@ RocketModel::HullBell RocketModel::buildHullBell(RenderBackend& b, const RocketD
 }
 
 void RocketModel::Draw(RenderBackend& b, const RocketFrame& f) const {
+    // The hull mesh is built nose-at-origin; slide it down its axis by cm_dist so
+    // the CoM lands at st.r (which f.hull maps to the mesh origin).
+    RMat4 hullM = rmath::mul(f.hull, rmath::translate({0, 0, (float)f.dims.cm_dist}));
+
     Material body;  body.lit = true; body.cull = false;   // unculled: open collar + nozzle shapes
-    b.DrawModel(hull_, f.hull, body);
+    b.DrawModel(hull_, hullM, body);
     Material bell;  bell.lit = true; bell.cull = false;    // unculled: concave nozzle interior
     b.DrawModel(bell_, f.bell, bell);
 
@@ -141,7 +145,7 @@ void RocketModel::Draw(RenderBackend& b, const RocketFrame& f) const {
     // u_heat in the shader; shown on ascent and (brightly) on reentry.
     if (f.heating > 0.03f) {
         Material heat; heat.emissive = true; heat.depth_write = false;
-        b.DrawModel(hull_, rmath::mul(f.hull, rmath::scale(1.05f)), heat);
+        b.DrawModel(hull_, rmath::mul(hullM, rmath::scale(1.05f)), heat);
     }
 
     if (!f.firing) return;
