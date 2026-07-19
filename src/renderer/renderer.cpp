@@ -105,6 +105,7 @@ void Renderer::Run() {
         HandleInput();
         p_ref_eci_ = primaryState().r;   // scene centred on the selected rocket
         UpdateThrustLevels();
+        UpdateDetonations();
         UpdateTrails();
         DrawFrame(BuildCamera());
         // First completed frame => the backend has loaded its textures (ensureEarth
@@ -128,6 +129,17 @@ void Renderer::UpdateThrustLevels() {
         prevFuel_[i]  = fuel;
         thrustLvl_[i] += ((firing ? 1.0f : 0.0f) - thrustLvl_[i]) * k;
     }
+}
+
+void Renderer::UpdateDetonations() {
+    // Latch the first frame each rocket is seen detonated, so the explosion animation
+    // has a stable start time even though the sim keeps republishing the flag. Reset
+    // the buffer when the rocket count changes (indices no longer line up).
+    const size_t n = states_.size();
+    if (detStart_.size() != n) detStart_.assign(n, -1.0);
+    const double now = backend_.Time();
+    for (size_t i = 0; i < n; i++)
+        if (states_[i].detonation_active && detStart_[i] < 0.0) detStart_[i] = now;
 }
 
 void Renderer::UpdateTrails() {
@@ -261,11 +273,14 @@ void Renderer::DrawEarth(const RCamera& cam, RVec3 earthC) {
 void Renderer::DrawRocket() const {
     // Draw every rocket. Each is positioned at its own ECI state; the primary sits
     // at the scene origin (p_ref_eci_ == its r), the rest are offset via ToView.
-    for (size_t i = 0; i < states_.size(); i++)
-        DrawOneRocket(states_[i], i < thrustLvl_.size() ? thrustLvl_[i] : 0.0f);
+    const double now = backend_.Time();
+    for (size_t i = 0; i < states_.size(); i++) {
+        double detTime = (i < detStart_.size() && detStart_[i] >= 0.0) ? now - detStart_[i] : -1.0;
+        DrawOneRocket(states_[i], i < thrustLvl_.size() ? thrustLvl_[i] : 0.0f, detTime);
+    }
 }
 
-void Renderer::DrawOneRocket(const RocketState& st, float thrustLevel) const {
+void Renderer::DrawOneRocket(const RocketState& st, float thrustLevel, double detTime) const {
     Quat   qr       = st.q_rocket;
     Quat   qe       = st.q_engine;
     double cm_dist  = st.cm_dist;
@@ -307,6 +322,12 @@ void Renderer::DrawOneRocket(const RocketState& st, float thrustLevel) const {
     f.vel_dir = rvDir(st.v);
     f.nozzle  = ToView(nozzle_eci);
     f.exhaust_dir = rvDir(-thrust_eci);
+
+    // Detonation: anchor the explosion at the rocket's view-space position and let
+    // the backend animate off the elapsed time (raylib ignores these).
+    f.center    = ToView(st.r);
+    f.detonated = detTime >= 0.0;
+    f.det_time  = (float)fmax(0.0, detTime);
 
     backend_.DrawRocket(f);
 }

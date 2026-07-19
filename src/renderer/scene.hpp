@@ -33,6 +33,13 @@ struct RocketFrame {
     RVec3 vel_dir;         // unit travel direction, view space (windward = normal . vel_dir)
     RVec3 nozzle;          // bell exit, view space (km)
     RVec3 exhaust_dir;     // unit direction the plume travels, view space
+
+    // Detonation (bgfx backend only; raylib ignores these). When `detonated` is
+    // set the rocket has blown up: the backend draws the explosion at `center`
+    // and no hull/plume, driving the animation off `det_time`.
+    bool  detonated = false;   // this rocket has detonated
+    float det_time  = 0.0f;    // seconds elapsed since detonation began
+    RVec3 center{};            // rocket position, view space (km) -- explosion anchor
 };
 
 // Everything needed to draw the Earth for one frame. The backend owns the mesh,

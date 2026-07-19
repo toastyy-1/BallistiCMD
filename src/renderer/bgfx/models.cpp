@@ -130,6 +130,9 @@ RocketModel::HullBell RocketModel::buildHullBell(RenderBackend& b, const RocketD
 }
 
 void RocketModel::Draw(RenderBackend& b, const RocketFrame& f) const {
+    // Destroyed: the explosion replaces the intact hull + plume entirely.
+    if (f.detonated) { drawDetonation(b, f); return; }
+
     // The hull mesh is built nose-at-origin; slide it down its axis by cm_dist so
     // the CoM lands at st.r (which f.hull maps to the mesh origin).
     RMat4 hullM = rmath::mul(f.hull, rmath::translate({0, 0, (float)f.dims.cm_dist}));
@@ -195,6 +198,65 @@ void RocketModel::Draw(RenderBackend& b, const RocketFrame& f) const {
     g.color = { 255, 190, 90, (unsigned char)(150 * f.thrust) };
     g.blend = BlendMode::Additive; g.depth_write = false;
     b.DrawModel(sphere_, rmath::placeSphere(f.nozzle, radiusW * (0.7f + 0.2f * f.flick)), g);
+}
+
+void RocketModel::drawDetonation(RenderBackend& b, const RocketFrame& f) const {
+    const float a      = f.det_time;    // seconds since detonation
+    const float Dfire  = 1.5f;          // fireball lifetime
+    const float Dtotal = 4.0f;          // incl. lingering smoke
+    if (a > Dtotal) return;             // fully dissipated: the rocket is gone
+
+    auto clamp01 = [](float x) { return x < 0.0f ? 0.0f : (x > 1.0f ? 1.0f : x); };
+
+    // Blast scale: a few tens of metres, floored so small rockets still read. All
+    // layers are additive glow spheres about the rocket's view-space position,
+    // depth-tested but not depth-writing (so the Earth occludes them and the layers
+    // blend through each other), exactly like the plume.
+    const float Rmax  = (float)(fmax(dims_.radius * 25.0, 30.0) * M_TO_KM);  // km
+    const RVec3 c     = f.center;
+    const float flick = f.flick;        // reuse the plume's flame flicker for turbulence
+
+    auto glow = [&](float radiusKm, RColor rgb, float alpha) {
+        alpha = clamp01(alpha);
+        if (alpha <= 0.002f || radiusKm <= 0.0f) return;
+        Material m;
+        m.color = { rgb.r, rgb.g, rgb.b, (unsigned char)(alpha * 255.0f) };
+        m.blend = BlendMode::Additive;
+        m.depth_write = false;
+        b.DrawModel(sphere_, rmath::placeSphere(c, radiusKm), m);
+    };
+
+    // Flash: brief blinding light at t=0.
+    if (a < 0.12f) {
+        float p = a / 0.12f;
+        glow(Rmax * (0.5f + 0.6f * p), { 255, 250, 235, 255 }, (1.0f - p) * 0.9f);
+    }
+
+    // Fireball: nested layers, ease-out expansion, fading over Dfire.
+    if (a < Dfire) {
+        float p    = a / Dfire;
+        float R    = Rmax * (1.0f - (1.0f - p) * (1.0f - p));   // fast then slowing
+        float env  = 1.0f - p;                                  // overall fade envelope
+        float turb = 0.9f + 0.15f * flick;
+        glow(R * 1.15f * turb, { 120,  40,  10, 255 }, env * 0.35f);            // smoky outer
+        glow(R * 0.85f * turb, { 255, 120,  30, 255 }, env * 0.60f);            // flame body
+        glow(R * 0.50f,        { 255, 230, 180, 255 }, (1.0f - p * p) * 0.85f); // hot core
+        if (p < 0.3f)                                                           // blue-white centre
+            glow(R * 0.28f,    { 210, 225, 255, 255 }, (1.0f - p / 0.3f) * 0.7f);
+    }
+
+    // Shockwave: thin fast front, gone by 0.6 s.
+    if (a < 0.6f) {
+        float p = a / 0.6f;
+        glow(Rmax * (0.4f + 1.8f * p), { 200, 220, 255, 255 }, (1.0f - p) * 0.25f);
+    }
+
+    // Lingering smoke: a dim warm glow that slowly grows and fades out by Dtotal.
+    const float s0 = Dfire * 0.6f;      // starts overlapping the fireball tail
+    if (a > s0) {
+        float q = clamp01((a - s0) / (Dtotal - s0));
+        glow(Rmax * (1.0f + 0.6f * q), { 60, 35, 20, 255 }, (1.0f - q) * 0.30f);
+    }
 }
 
 }
