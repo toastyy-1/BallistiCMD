@@ -1,5 +1,6 @@
 #pragma once
 #include <atomic>
+#include <functional>
 #include <mutex>
 #include <vector>
 #include "types.hpp"
@@ -12,7 +13,7 @@ namespace sim {
 
         Sim();
         ~Sim();
-        void Run();
+        void Run(std::function<bool()> renderer_ready = {});
         void Stop() { running.store(false); }
         bool is_running() const { return running.load(); }
 

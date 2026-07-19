@@ -4,6 +4,7 @@
 #include <vector>
 #include "../render_backend.hpp"
 #include "models.hpp"
+#include "earth_bump_map.hpp"
 
 struct GLFWwindow;
 
@@ -107,7 +108,6 @@ private:
     MeshHandle          cloudMesh_ = 0;
     MeshHandle          patchMesh_ = 0;
     bgfx::TextureHandle earthColor_ = BGFX_INVALID_HANDLE,
-                        earthBump_  = BGFX_INVALID_HANDLE,
                         earthNight_ = BGFX_INVALID_HANDLE,
                         earthCloud_ = BGFX_INVALID_HANDLE,
                         earthRough_ = BGFX_INVALID_HANDLE,

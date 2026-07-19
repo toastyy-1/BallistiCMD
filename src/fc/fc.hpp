@@ -79,7 +79,7 @@ class FlightController {
     void flight_controller_process(Rocket& r, double current_time);
 
     private:
-    static constexpr double HOLD_DURATION = 40.0;
+    static constexpr double HOLD_DURATION = 10.0;
 
     // rocket geometry copied from the rocket part of sim once at startup
     const RocketProps props;

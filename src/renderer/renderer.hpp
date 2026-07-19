@@ -5,6 +5,7 @@
 #include "../sim/rocket.hpp"   // RocketState (returned by primaryState / sim::get_state)
 #include <vector>
 #include <string>
+#include <atomic>
 
 namespace sim { class Sim; }
 
@@ -17,6 +18,8 @@ public:
     Renderer(RenderBackend& backend, const sim::Sim& s);
     ~Renderer();
     void Run();
+
+    bool IsInitialized() const { return initialized_.load(std::memory_order_acquire); }
 
 private:
     void HandleInput();
@@ -78,6 +81,10 @@ private:
 
     RenderBackend&   backend_;
     const sim::Sim&  sim_;
+
+    // Set true after the first rendered frame (backend textures loaded). Read from
+    // the sim thread via IsInitialized(), so it must be atomic.
+    std::atomic<bool> initialized_{false};
 
     // Renderer-owned unit sphere (radius 1) for the surface markers.
     MeshHandle markerSphere_ = 0;

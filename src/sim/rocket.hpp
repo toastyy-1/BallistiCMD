@@ -5,6 +5,7 @@
 #include "fc/fc.hpp"
 #include <array>
 #include <optional>
+#include "renderer/bgfx/earth_bump_map.hpp"
 
 struct RocketStartState {
     Vec3 origin_r_eci;
@@ -47,7 +48,7 @@ class Rocket {
     void set_drag_coeff(double drag_coeff) { props.Cd = drag_coeff; }
 
     // simulation things
-    void update_dynamics();
+    void update_dynamics(double current_time);
     void update_rotation();
     void update_mass();
     void update_flight_controller(double current_time) {
@@ -75,6 +76,9 @@ class Rocket {
     // rocket static configuration                                                               //
     ///////////////////////////////////////////////////////////////////////////////////////////////
     std::optional<FlightController> fc;
+
+    // topography
+    renderer::EarthBumpMap& topo = renderer::EarthBumpMap::Get();
 
     ///////////////////////////////////////////////////////////////////////////////////////////////
     // rocket static configuration                                                               //
@@ -120,5 +124,5 @@ class Rocket {
     double calculate_engine_rotational_component();
     Vec3 calc_drag_accel();
     Vec3 nose_direction_eci();
-
+    Vec3 lat_lon_to_ecef(double latitude_deg, double longitude_deg);
 };
