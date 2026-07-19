@@ -310,6 +310,7 @@ void FlightController::payload_deploy() {
         cs.final_burn_flag = true;
         cs.rcs_activated_flag = false;
         cs.payload_deploy_cutoff_done = true;
+        cs.stage = FREE_FLIGHT;
         std::cout << "ENGINE_CUTOFF (frac " << frac << ") residual " << (v_needed - frac * dv_next_step) << " m/s\n";
         return;
     }
@@ -317,5 +318,15 @@ void FlightController::payload_deploy() {
     // make rocket not demolish its trajectory when its close to v cutoff
     if (!burning || v_gain.norm() > 3.0 * dv_next_step) {
         cs.target_att = quat_from_vec(v_gain.normalized());
+    }
+}
+
+void FlightController::free_flight() {
+    // determine altitude relative to target
+    Vec3 target_eci = target_eci_at_time_of_arrival(cs.time);
+    double dist = (cs.r - target_eci).norm();
+
+    if (dist < 1000.0) {
+        cs.detonate_flag = true;
     }
 }

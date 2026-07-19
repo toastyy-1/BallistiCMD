@@ -175,7 +175,7 @@ Quat FlightController::quat_from_vec(Vec3 u) {
 
 // sets the engine gimbal based on target orientation
 Quat FlightController::set_new_engine_gimbal_quat() {
-    if (cs.stage < STAGE_1) return {1, 0, 0, 0};
+    if (cs.stage < STAGE_1 || cs.stage == FREE_FLIGHT) return {1, 0, 0, 0};
 
     Quat target = cs.target_att;
     Quat current = cs.att;
@@ -338,6 +338,9 @@ void FlightController::flight_controller_process(Rocket& r, double current_time)
     case PAYLOAD_DEPLOY:
         payload_deploy();
         break;
+    case FREE_FLIGHT:
+        free_flight();
+        break;
     }
 
     // check if the engine was supposed to be cut off
@@ -361,6 +364,11 @@ void FlightController::flight_controller_process(Rocket& r, double current_time)
     if (cs.light_engine_flag) {
         cs.light_engine_flag = false;
         r.light_engine();
+    }
+
+    // check if rocket was supposed to be detonated
+    if (cs.detonate_flag) {
+        r.activate_detonation();
     }
 
     // send targeting commands to the engine gimbal system based on target attitude in cs

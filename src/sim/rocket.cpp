@@ -78,6 +78,7 @@ RocketState Rocket::get_state() const {
     s.engine_dist = length - s_engine;
     s.radius      = props.radius;
     s.init        = start_state;
+    s.detonation_active = is_detonated;
     return s;
 }
 

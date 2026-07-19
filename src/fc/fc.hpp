@@ -28,7 +28,8 @@ enum MissionStage {
     ARMED = -1,
     STAGE_1 = 0,
     STAGE_2 = 1,
-    PAYLOAD_DEPLOY = 2
+    PAYLOAD_DEPLOY = 2,
+    FREE_FLIGHT = 3
 };
 
 // holds the states of controls for the rocket
@@ -63,6 +64,7 @@ struct ControlStates {
     bool separate_stage_flag = false; // set to true if you want to separate stage on that step
     bool cutoff_engine_flag = false; // set to true if you want to permanently cut off the engine on that step
     bool final_burn_flag = false; // set to true to burn only final_burn_fraction of this step, then cut off
+    bool detonate_flag = false; // set to true if you want to blow the rocket up
     double final_burn_fraction = 1.0; // fraction of a full step to burn before the sub step cutoff
     bool payload_deploy_cutoff_done = false; // set once payload_deploy has cut the engine
 
@@ -104,5 +106,6 @@ class FlightController {
     void s1_powered();
     void s2_powered();
     void payload_deploy();
+    void free_flight();
 
 };

@@ -15,12 +15,15 @@ struct RocketStartState {
 
 // snapshot of rocket state at any given moment
 struct RocketState {
+    bool detonation_active = false;
+
     double t = 0;
+    double mass = 0, fuel = 0;
+    double length = 0, cm_dist = 0, engine_dist = 0, radius = 0;   // dims from nose
+
     Vec3 r{}, v{}, a{}, w{};
     Quat q_rocket{1, 0, 0, 0};
     Quat q_engine{1, 0, 0, 0};
-    double mass = 0, fuel = 0;
-    double length = 0, cm_dist = 0, engine_dist = 0, radius = 0;   // dims from nose
     RocketStartState init{};
 };
 
@@ -66,6 +69,7 @@ class Rocket {
     void rcs_on() { rcs_active = true; } // enable or disable rcs orientation correction
     void rcs_off() { rcs_active = false; }
     void rcs_apply_const_moment(Vec3 moment); // applies moment until changed
+    void activate_detonation() { is_detonated = true; };
 
 
     ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -117,6 +121,9 @@ class Rocket {
     // accessors for the currently active stage
     Stage& active() { return props.stages[active_idx]; }
     const Stage& active() const { return props.stages[active_idx]; }
+
+    // rocket explode button
+    bool is_detonated = false;
 
     // helper functions
     void set_start(double origin_latitude, double origin_longitude, double target_latitude, double target_longitude); // sets the starting and target position/attitude (only called from the constructor

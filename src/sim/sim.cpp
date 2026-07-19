@@ -80,7 +80,7 @@ namespace sim {
             // make snapshot for other threads of sim states
             publish_sim_states(rocket_list);
 
-            std::this_thread::sleep_for(std::chrono::duration<double>(0.01));
+            std::this_thread::sleep_for(std::chrono::duration<double>(0.0001));
         }
 
         write_results_csv(rocket_list);
