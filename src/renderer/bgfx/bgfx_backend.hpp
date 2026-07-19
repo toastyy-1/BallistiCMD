@@ -112,7 +112,6 @@ private:
                         earthCloud_ = BGFX_INVALID_HANDLE,
                         earthRough_ = BGFX_INVALID_HANDLE,
                         earthEmiss_ = BGFX_INVALID_HANDLE;
-    EarthBumpMap        earthBump_;
 
     // 3D view (view 0) state.
     float near_ = 0.01f, far_ = 1000.0f;
