@@ -35,6 +35,9 @@ FlightController::FlightController(Rocket& r, double current_time) : props(r.pro
 FCInitState FlightController::create_target_trajectory(double lat_target, double long_target, Rocket& r) {
     FCInitState out;
 
+    // target's terrain height
+    double target_radius = renderer::EarthBumpMap::Get().SurfaceRadius2D(lat_target, long_target);
+
     // convert to radians
     lat_target = lat_target * M_PI / 180.0;
     long_target = long_target * M_PI / 180.0;
@@ -47,14 +50,14 @@ FCInitState FlightController::create_target_trajectory(double lat_target, double
 
     // get ECI coordinates from lat and long
     out.r_origin = {
-        EARTH_RADIUS * cos(lat_origin) * cos(long_origin),
-        EARTH_RADIUS * cos(lat_origin) * sin(long_origin),
-        EARTH_RADIUS * sin(lat_origin)
+        radius * cos(lat_origin) * cos(long_origin),
+        radius * cos(lat_origin) * sin(long_origin),
+        radius * sin(lat_origin)
     };
     out.r_target_ecef = {
-        EARTH_RADIUS * cos(lat_target) * cos(long_target),
-        EARTH_RADIUS * cos(lat_target) * sin(long_target),
-        EARTH_RADIUS * sin(lat_target)
+        target_radius * cos(lat_target) * cos(long_target),
+        target_radius * cos(lat_target) * sin(long_target),
+        target_radius * sin(lat_target)
     };
 
     Vec3 unit_vec_from_center = {
