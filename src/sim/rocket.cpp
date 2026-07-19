@@ -142,8 +142,8 @@ void Rocket::rcs_apply_const_moment(Vec3 m) {
  * @return forward thrust in newtons relative to body frame
  */
 double Rocket::calculate_engine_thrust_component() {
-    double gimbal_angle = 2.0 * std::acos(q_engine.w);
-    return active().thrust * std::cos(gimbal_angle);
+    double qw = q_engine.w;
+    return active().thrust * (2.0 * qw * qw - 1.0);
 }
 
 /**
@@ -152,8 +152,8 @@ double Rocket::calculate_engine_thrust_component() {
  * @return lateral thrust in newtons relative to body frame
  */
 double Rocket::calculate_engine_rotational_component() {
-    double gimbal_angle = 2.0 * std::acos(q_engine.w);
-    return active().thrust * std::sin(gimbal_angle);
+    double qw = q_engine.w;
+    return active().thrust * (2.0 * qw * std::sqrt(std::max(0.0, 1.0 - qw * qw)));
 }
 
 /**

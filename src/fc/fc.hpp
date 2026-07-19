@@ -46,6 +46,7 @@ struct ControlStates {
     Quat att; // attitude
     Quat target_att; // the current iterations target attitude
     Vec3 I; // current moment of inertia
+    double z_cm; // CoM estimate
 
     double dt; // time from last time measurement
     double time;

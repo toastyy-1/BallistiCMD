@@ -28,6 +28,7 @@ namespace sim {
 
         mutable std::mutex rocket_states_mutex;
         std::vector<RocketState> rocket_states;
+        std::vector<RocketState> scratch_states; // sim thread only
 
         double t = 0;
         std::atomic<bool> running{true};

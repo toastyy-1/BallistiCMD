@@ -53,6 +53,10 @@ namespace sim {
         // configure the rocket for starting settings
         publish_sim_states(rocket_list);
 
+        // snapshots for renderer when its ready
+        using wall_clock = std::chrono::steady_clock;
+        auto next_publish = wall_clock::now();
+
         while (running.load()) {
 
             ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -78,11 +82,15 @@ namespace sim {
             t += TIME_STEP;
 
             // make snapshot for other threads of sim states
-            publish_sim_states(rocket_list);
+            if (wall_clock::now() >= next_publish) {
+                publish_sim_states(rocket_list);
+                next_publish = wall_clock::now() + std::chrono::milliseconds(10);
+            }
 
-            //std::this_thread::sleep_for(std::chrono::duration<double>(0.0001));
+            std::this_thread::sleep_for(std::chrono::duration<double>(0.00001));
         }
 
+        publish_sim_states(rocket_list); // final states
         write_results_csv(rocket_list);
     }
 
@@ -99,17 +107,17 @@ namespace sim {
     }
 
     void Sim::publish_sim_states(const std::vector<Rocket>& rocket_list) {
-        std::vector<RocketState> states;
-        states.reserve(rocket_list.size());
+        scratch_states.clear();
+        scratch_states.reserve(rocket_list.size());
 
         for (size_t i = 0; i < rocket_list.size(); i++) {
             RocketState s = rocket_list[i].get_state();
             s.t = t;
-            states.push_back(s);
+            scratch_states.push_back(s);
         }
 
         std::lock_guard<std::mutex> lk(rocket_states_mutex);
-        rocket_states = std::move(states);
+        std::swap(rocket_states, scratch_states);
     }
 
 

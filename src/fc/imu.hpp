@@ -12,7 +12,7 @@ class INS {
     INS() : rng(94058) {}
 
     // reads sim states and adds noise
-    Vec3 read_INS_acc(const Rocket& r); // inertial specific force
+    Vec3 read_INS_acc(const Rocket& r, const Vec3& g); // inertial specific force, g from read_INS_grav
     Vec3 read_INS_gyr(const Rocket& r); // angular velocity
     Vec3 read_INS_grav(const Rocket& r); // gravity vector only
 
@@ -20,19 +20,14 @@ class INS {
     std::mt19937 rng;
 
     // nosie for sensors
-    double acc_stddev = 0.001;
-    double gyr_stddev = 0.0001;
+    std::normal_distribution<double> acc_noise{0.0, 0.001};
+    std::normal_distribution<double> gyr_noise{0.0, 0.0001};
 
-    double noise(double val, double stddev) {
-        std::normal_distribution<double> dist(0.0, stddev);
-        return val + dist(rng);
-    }
-
-    Vec3 add_noise(Vec3 data_in, double sensor_stddev) {
+    Vec3 add_noise(Vec3 data_in, std::normal_distribution<double>& dist) {
         return {
-            noise(data_in.x, sensor_stddev),
-            noise(data_in.y, sensor_stddev),
-            noise(data_in.z, sensor_stddev)
+            data_in.x + dist(rng),
+            data_in.y + dist(rng),
+            data_in.z + dist(rng)
         };
     }
 

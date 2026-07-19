@@ -11,12 +11,12 @@
 #include "types.hpp"
 #include "sim/rocket.hpp"
 
-Vec3 INS::read_INS_acc(const Rocket& r) {
-    return add_noise(r.a - gravity_eci(r.r), acc_stddev);
+Vec3 INS::read_INS_acc(const Rocket& r, const Vec3& g) {
+    return add_noise(r.a - g, acc_noise);
 }
 
 Vec3 INS::read_INS_gyr(const Rocket& r) {
-    return add_noise(r.w, gyr_stddev);
+    return add_noise(r.w, gyr_noise);
 }
 
 Vec3 INS::read_INS_grav(const Rocket& r) {
@@ -121,8 +121,8 @@ void FlightController::init(Rocket& r, double current_time) {
 
 // aquires new data from the sim
 void FlightController::pull_new_data(const Rocket& r, double current_time) {
-    cs.a_inertial = ins.read_INS_acc(r);
     cs.g = ins.read_INS_grav(r);
+    cs.a_inertial = ins.read_INS_acc(r, cs.g);
     cs.a = cs.a_inertial + cs.g;
     cs.w = ins.read_INS_gyr(r);
     cs.dt = current_time - cs.time;
@@ -143,16 +143,8 @@ void FlightController::estimate_state() {
 
     // now for attitude estimation
 
-    // q_dot = 0.5 * Ω(w) * q
-    Mat4 omega_w = {{
-        {     0.0, -cs.w.x, -cs.w.y, -cs.w.z },
-        {  cs.w.x,     0.0,  cs.w.z, -cs.w.y },
-        {  cs.w.y, -cs.w.z,     0.0,  cs.w.x },
-        {  cs.w.z,  cs.w.y, -cs.w.x,     0.0 },
-    }};
-
     // integrate quaternion rate
-    Quat q_dot = omega_w * cs.att;
+    Quat q_dot = cs.att * Quat{0.0, cs.w.x, cs.w.y, cs.w.z};
     cs.att.w += 0.5 * q_dot.w * cs.dt;
     cs.att.x += 0.5 * q_dot.x * cs.dt;
     cs.att.y += 0.5 * q_dot.y * cs.dt;
@@ -203,16 +195,8 @@ Quat FlightController::set_new_engine_gimbal_quat() {
     // active stage index for the current mission stage
     const Stage& s = props.stages[cs.stage];
 
-    // calculate the CoM of the rocket
-    double M = 0.0, m_CoM = 0.0, base = 0.0;
-    for (int i = cs.stage; i < ROCKET_NUM_STAGES; i++) {
-        const Stage& st = props.stages[i];
-        double m = st.m_dry + st.m_fuel;
-        M += m;
-        m_CoM += m * (base + st.tip_to_end_length - st.CoM_dist);
-        base += st.tip_to_end_length;
-    }
-    double z_cm = m_CoM / M;
+    // CoM of the rocket
+    double z_cm = cs.z_cm;
 
     // engine gimbal point
     double s_engine = s.tip_to_end_length - s.engine_distance;
@@ -271,6 +255,7 @@ void FlightController::calculate_I() {
         base += st.tip_to_end_length;
     }
     double z_cm = m_CoM / M_total;
+    cs.z_cm = z_cm;
 
     base = 0.0;
     for (int i = first_stage; i < ROCKET_NUM_STAGES; i++) {
@@ -315,9 +300,6 @@ void FlightController::flight_controller_process(Rocket& r, double current_time)
     // estimate state based on pulled data
     estimate_state();
 
-    // estimate current moment of inertia
-    calculate_I();
-
     // manages setting a target attitude for the engine gimballing stuff depending on what the stage is
     switch (cs.stage) {
     case STANDBY:
@@ -345,6 +327,9 @@ void FlightController::flight_controller_process(Rocket& r, double current_time)
         free_flight();
         break;
     }
+
+    // estimate current moment of inertia
+    calculate_I();
 
     // check if the engine was supposed to be cut off
     if (cs.final_burn_flag) {

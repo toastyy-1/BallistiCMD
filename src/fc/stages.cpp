@@ -98,26 +98,28 @@ static Vec3 lambert(Vec3 r, Vec3 r_t, double tff) {
     double z0 = 0.0;
     double z1 = 0.1; // start with initial guesses that are kinda close to one another
 
+    // time of flight error at a given z
+    auto F_z = [&](double z_in) {
+        double y = y_z(z_in);
+        return pow(y / Cz(z_in), 1.5) * Sz(z_in) + A * sqrt(y) - sqrt(GM_EARTH) * tff;
+    };
+
+    double F0 = F_z(z0);
     for (int i = 0; i < 60; i++) {
-        // find F at z0
-        double y0 = y_z(z0);
-        double F0 = pow(y0 / Cz(z0), 1.5) * Sz(z0) + A * sqrt(y0) - sqrt(GM_EARTH) * tff;
-        
-        // find F at z1
-        double y1 = y_z(z1);
-        double F1 = pow(y1 / Cz(z1), 1.5) * Sz(z1) + A * sqrt(y1) - sqrt(GM_EARTH) * tff;
-        
+        double F1 = F_z(z1);
+
         // step
         double z_next = z1 - F1 * (z1 - z0) / (F1 - F0);
-        
+
         // check if it converges
         if (fabs(z_next - z1) < 1e-8) {
             z = z_next;
             break;
         }
-        
+
         // shift values for next iteration
         z0 = z1;
+        F0 = F1;
         z1 = z_next;
     }
 
