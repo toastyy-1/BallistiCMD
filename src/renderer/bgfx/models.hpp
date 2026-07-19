@@ -20,6 +20,11 @@ public:
     void Draw(RenderBackend& b, const RocketFrame& f) const;
 
 private:
+    // Draw the detonation effect (flash -> fireball -> shockwave -> lingering smoke)
+    // in place of the intact rocket, animated off f.det_time. Additive glow spheres,
+    // depth-tested but not depth-writing (matches the plume).
+    void drawDetonation(RenderBackend& b, const RocketFrame& f) const;
+
     // Build the hull + bell meshes for the given dimensions and return their handles.
     struct HullBell { RocketDims dims; MeshHandle hull; MeshHandle bell; };
     HullBell buildHullBell(RenderBackend& b, const RocketDims& d) const;
