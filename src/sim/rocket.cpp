@@ -78,7 +78,7 @@ RocketState Rocket::get_state() const {
     s.engine_dist = length - s_engine;
     s.radius      = props.radius;
     s.init        = start_state;
-    s.detonation_active = is_detonated;
+    s.detonation_active = detonated;
     return s;
 }
 
@@ -329,8 +329,8 @@ void Rocket::update_dynamics(double current_time) {
 
     // keep rocket from falling through the earth
     double alt_eci = r.norm();
-    if (alt_eci <= topo.kMaxElevation + EARTH_RADIUS) {
-        double surface_alt_eci = topo.SurfaceRadius3D(eci_to_ecef(r, current_time));
+    if (alt_eci <= topo->kMaxElevation + EARTH_RADIUS) {
+        double surface_alt_eci = topo->SurfaceRadius3D(eci_to_ecef(r, current_time));
         if (alt_eci < surface_alt_eci) {
             Vec3 r_hat = r.normalized();
             r = r_hat * surface_alt_eci;
@@ -466,7 +466,7 @@ void Rocket::set_engine_orientation(Quat orientation) {
 Vec3 Rocket::lat_lon_to_ecef(double latitude_deg, double longitude_deg) {
     double lat = latitude_deg * M_PI / 180.0;
     double lon = longitude_deg * M_PI / 180.0;
-    double alt = topo.SurfaceRadius2D(latitude_deg, longitude_deg);
+    double alt = topo->SurfaceRadius2D(latitude_deg, longitude_deg);
     return {
         .x = alt * cos(lat) * cos(lon),
         .y = alt * cos(lat) * sin(lon),

@@ -38,12 +38,16 @@ class Rocket {
 
     static constexpr int NUM_STAGES = ROCKET_NUM_STAGES; // stage_1, stage_2, payload
 
+    // counter to track once the rocket is dead how long it should stay existing before deleting itself
+    double life_countdown = 30.0; // stays alive for n (sim) seconds before disappearing
+
     // setup
     Rocket(double origin_latitude, double origin_longitude, double target_latitude, double target_longitude);
     ~Rocket();
 
     // getters:
     RocketState get_state() const;
+    bool is_detonated() { return detonated; }
 
     // setters (should only be used on setup)
     void set_pos(const Vec3& pos) { r = pos; } // set absolute position
@@ -69,7 +73,7 @@ class Rocket {
     void rcs_on() { rcs_active = true; } // enable or disable rcs orientation correction
     void rcs_off() { rcs_active = false; }
     void rcs_apply_const_moment(Vec3 moment); // applies moment until changed
-    void activate_detonation() { is_detonated = true; };
+    void activate_detonation() { detonated = true; }
 
 
     ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -82,7 +86,7 @@ class Rocket {
     std::optional<FlightController> fc;
 
     // topography
-    renderer::EarthBumpMap& topo = renderer::EarthBumpMap::Get();
+    renderer::EarthBumpMap* topo = &renderer::EarthBumpMap::Get();
 
     ///////////////////////////////////////////////////////////////////////////////////////////////
     // rocket static configuration                                                               //
@@ -123,7 +127,7 @@ class Rocket {
     const Stage& active() const { return props.stages[active_idx]; }
 
     // rocket explode button
-    bool is_detonated = false;
+    bool detonated = false;
 
     // helper functions
     void set_start(double origin_latitude, double origin_longitude, double target_latitude, double target_longitude); // sets the starting and target position/attitude (only called from the constructor

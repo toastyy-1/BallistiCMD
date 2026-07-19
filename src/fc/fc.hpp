@@ -85,7 +85,7 @@ class FlightController {
     static constexpr double HOLD_DURATION = 10.0;
 
     // rocket geometry copied from the rocket part of sim once at startup
-    const RocketProps props;
+    RocketProps props;
 
     INS ins;
     ControlStates cs;

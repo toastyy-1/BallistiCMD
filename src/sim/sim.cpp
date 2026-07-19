@@ -69,13 +69,23 @@ namespace sim {
 
             // for each rocket, perform sim calculations individually for each one through the list until every one is updated independently of one another
             for (size_t i = 0; i < rocket_list.size(); i++) {
+                Rocket& r = rocket_list[i];
                 // lets the flight controller process data to send commands to the rocket
-                rocket_list[i].update_flight_controller(t);
+                r.update_flight_controller(t);
 
                 // update the position, orientation, and mass of the rocket
-                rocket_list[i].update_mass();
-                rocket_list[i].update_dynamics(t);
-                rocket_list[i].update_rotation();
+                r.update_mass();
+                r.update_dynamics(t);
+                r.update_rotation();
+
+                // delete rocket if it exploded
+                if (r.is_detonated()) {
+                    if (r.life_countdown <= 0) {
+                        rocket_list.erase(rocket_list.begin() + i);
+                        i--;
+                    }
+                    r.life_countdown -= TIME_STEP;
+                }
             }
 
             // increment time step
@@ -87,7 +97,7 @@ namespace sim {
                 next_publish = wall_clock::now() + std::chrono::milliseconds(10);
             }
 
-            std::this_thread::sleep_for(std::chrono::duration<double>(0.00001));
+            std::this_thread::sleep_for(std::chrono::duration<double>(0.0005));
         }
 
         publish_sim_states(rocket_list); // final states
