@@ -14,6 +14,8 @@ SimConfig load_sim_config(const std::string& path) {
 
     SimConfig cfg;
 
+    cfg.time_step = tbl["time_step"].value_or(cfg.time_step);
+
     // one launch entry per rocket, each corresponding to its own origin and target
     auto launches = tbl["launch"].as_array();
     if (launches) {

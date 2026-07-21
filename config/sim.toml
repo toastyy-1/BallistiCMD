@@ -1,5 +1,7 @@
 # sim launch scenario and rocket configuration
 
+time_step = 0.01 # seconds
+
 # one entry per rocket
 [[launch]]
 origin_lat = 48.209

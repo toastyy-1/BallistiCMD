@@ -2,8 +2,8 @@
 
 #include <cmath>
 
-// GLOBAL TIME STEP FOR SIMULATION AND SUCH THINGS
-constexpr double TIME_STEP = 0.01; // seconds
+// GLOBAL TIME STEP FOR SIMULATION AND SUCH THINGS (overwritten by config)
+inline double TIME_STEP = 0.01; // seconds
 
 // Math
 constexpr double TAU        = 6.28318530717958647692;

@@ -30,6 +30,7 @@ namespace sim {
         // rocket placement process                                                                  //
         ///////////////////////////////////////////////////////////////////////////////////////////////
         SimConfig config = load_sim_config("config/sim.toml");
+        TIME_STEP = config.time_step;
 
         for (const LaunchTarget& launch : config.launches) {
             Rocket new_rocket{launch.origin_lat, launch.origin_lon, launch.target_lat, launch.target_lon,
