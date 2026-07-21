@@ -3,6 +3,7 @@
 #include <cmath>
 
 // GLOBAL TIME STEP FOR SIMULATION AND SUCH THINGS (overwritten by config)
+inline double STEP_DELAY = 0.001;
 inline double TIME_STEP = 0.01; // seconds
 
 // Math

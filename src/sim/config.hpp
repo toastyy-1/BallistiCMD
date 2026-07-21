@@ -13,6 +13,7 @@ struct SimConfig {
     std::vector<LaunchTarget> launches;
     RocketProps rocket_props;
     double time_step = 0.01; // seconds
+    double step_delay = 0.001;
 };
 
 // reads the sims config file

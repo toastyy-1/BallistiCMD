@@ -84,7 +84,8 @@ namespace sim {
                 next_publish = wall_clock::now() + std::chrono::milliseconds(10);
             }
 
-            std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
+            // delay sim a bit so the renderer has something to show
+            std::this_thread::sleep_for(std::chrono::duration<double>(STEP_DELAY));
         }
 
         publish_sim_states(rocket_list); // final states
