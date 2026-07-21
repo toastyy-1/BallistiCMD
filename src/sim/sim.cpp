@@ -39,12 +39,12 @@ namespace sim {
         std::uniform_real_distribution<double> ro(-0.2, 0.2);
         std::uniform_real_distribution<double> rt(-0.2, 0.2);
 
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < 1; i++) {
             double start_lat_gen = origin_center_lat * (1 + ro(rng));
             double start_long_gen = origin_center_long * (1 + ro(rng));
 
-            double target_lat_gen = target_center_lat; /** (1 + rt(rng));*/
-            double target_long_gen = target_center_long; /** (1 + 4.0 * rt(rng));*/
+            double target_lat_gen = target_center_lat;
+            double target_long_gen = target_center_long;
 
             Rocket new_rocket{start_lat_gen, start_long_gen, target_lat_gen, target_long_gen};
             rocket_list.push_back(new_rocket);
@@ -76,7 +76,6 @@ namespace sim {
                 // update the position, orientation, and mass of the rocket
                 r.update_mass();
                 r.update_dynamics(t);
-                r.update_rotation();
 
                 // delete rocket if it exploded
                 if (r.is_detonated()) {
@@ -97,7 +96,7 @@ namespace sim {
                 next_publish = wall_clock::now() + std::chrono::milliseconds(10);
             }
 
-            std::this_thread::sleep_for(std::chrono::duration<double>(0.0005));
+            std::this_thread::sleep_for(std::chrono::duration<double>(0.001));
         }
 
         publish_sim_states(rocket_list); // final states

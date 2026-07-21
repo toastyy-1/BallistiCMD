@@ -24,7 +24,7 @@ constexpr double GM_EARTH             = 3.986004418e14;
 constexpr double EARTH_MASS           = GM_EARTH / G;
 
 // Gravity
-constexpr double J2 = 0; // TODO: change back to 1.08262668355e-3
+constexpr double J2 = 1.08262668355e-3;
 
 // Rendering
 constexpr float SIM_TO_RENDER = 0.001f;

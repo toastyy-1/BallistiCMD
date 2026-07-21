@@ -56,7 +56,6 @@ class Rocket {
 
     // simulation things
     void update_dynamics(double current_time);
-    void update_rotation();
     void update_mass();
     void update_flight_controller(double current_time) {
         if (pending_cutoff) { active().thrust = 0.0; pending_cutoff = false; } // process engine sub step cutoff (direction from fc)
@@ -133,7 +132,8 @@ class Rocket {
     void set_start(double origin_latitude, double origin_longitude, double target_latitude, double target_longitude); // sets the starting and target position/attitude (only called from the constructor
     double calculate_engine_thrust_component();
     double calculate_engine_rotational_component();
-    Vec3 calc_drag_accel();
+    Vec3 calc_drag_accel(const Vec3& r, const Vec3& v);
     Vec3 nose_direction_eci();
+    Vec3 net_body_torque() const; // engine + rcs torque about the combined CoM, body frame (constant across a step)
     Vec3 lat_lon_to_ecef(double latitude_deg, double longitude_deg);
 };

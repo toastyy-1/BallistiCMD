@@ -66,6 +66,10 @@ struct Quat {
         return {w / mag, x / mag, y / mag, z / mag};
     }
 
+    Quat operator+(const Quat& o) const { return {w + o.w, x + o.x, y + o.y, z + o.z}; }
+    Quat operator*(double s)      const { return {w * s,   x * s,   y * s,   z * s};   }
+    Quat& operator+=(const Quat& o) { w += o.w; x += o.x; y += o.y; z += o.z; return *this; }
+
     Quat operator*(const Quat& o) const {
         return {
             w*o.w - x*o.x - y*o.y - z*o.z,

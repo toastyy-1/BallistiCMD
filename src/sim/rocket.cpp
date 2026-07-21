@@ -156,16 +156,42 @@ double Rocket::calculate_engine_rotational_component() {
     return active().thrust * (2.0 * qw * std::sqrt(std::max(0.0, 1.0 - qw * qw)));
 }
 
+// nose direction rotated into the ECI frame from an attitude
+static Vec3 nose_from_quat(const Quat& q) {
+    return {
+        2.0 * (q.x * q.z + q.w * q.y),
+        2.0 * (q.y * q.z - q.w * q.x),
+        1.0 - 2.0 * (q.x * q.x + q.y * q.y)
+    };
+}
+
 /**
  * @return the rocket's nose direction in ECI frame coordinates
  */
 Vec3 Rocket::nose_direction_eci() {
-    double w = q_rocket.w, x = q_rocket.x, y = q_rocket.y, z = q_rocket.z;
-    return {
-        2.0 * (x * z + w * y),
-        2.0 * (y * z - w * x),
-        1.0 - 2.0 * (x * x + y * y)
-    };
+    return nose_from_quat(q_rocket);
+}
+
+/**
+ * net torque about the combined CopM in body frame
+ */
+Vec3 Rocket::net_body_torque() const {
+    Vec3 net_torque = {0, 0, 0};
+
+    // thrust direction in body frame
+    Vec3 nose_body = {0, 0, 1};
+    Vec3 q_vec = {q_engine.x, q_engine.y, q_engine.z};
+    Vec3 t = q_vec.cross(nose_body);
+    Vec3 thrust_dir_body = nose_body + t * (2.0 * q_engine.w) + q_vec.cross(t) * 2.0;
+
+    // lever arm from the combined CoM to the engine along the body axis
+    double s_engine = active().tip_to_end_length - active().engine_distance;
+    Vec3 r_engine = {0, 0, s_engine - z_cm};
+
+    net_torque += r_engine.cross(thrust_dir_body * active().thrust);
+    if (rcs_active) net_torque += applied_rcs_moment;
+
+    return net_torque;
 }
 
 // gravitational acceleration in the ECI frame
@@ -185,7 +211,7 @@ static Vec3 calc_gravity_accel(const Vec3& r) {
 }
 
 // acceleration due to drag in the ECI frame
-Vec3 Rocket::calc_drag_accel() {
+Vec3 Rocket::calc_drag_accel(const Vec3& r, const Vec3& v) {
     double altitude = r.norm() - EARTH_RADIUS; // altitude in meters
     double air_density;
 
@@ -251,9 +277,15 @@ Vec3 Rocket::calc_drag_accel() {
     return v_relative * (-drag_mag / (m_current * craft_speed));
 }
 
+static Quat quat_deriv(const Quat& q, const Vec3& w) {
+    Quat omega = {0.0, w.x, w.y, w.z};
+    return (q * omega) * 0.5;
+}
+
 void Rocket::update_dynamics(double current_time) {
     // rocket mass
     double m = m_current;
+    Vec3 I = I_body;
 
     // time step for the simulation
     double dt = TIME_STEP;
@@ -261,11 +293,25 @@ void Rocket::update_dynamics(double current_time) {
     // distance from center of earth
     double r_norm = r.norm();
 
-    // thrust acceleration
-    Vec3 a_thrust = nose_direction_eci() * (calculate_engine_thrust_component() / m);
+    // quantities the FC commands
+    double thrust_mag = calculate_engine_thrust_component();
+    Vec3 net_torque = net_body_torque();
 
-    // drag acceleration
-    Vec3 a_drag = calc_drag_accel();
+    // translational acceleration
+    auto accel = [&](const Vec3& r_i, const Vec3& v_i, const Quat& q_i) {
+        return calc_gravity_accel(r_i) + calc_drag_accel(r_i, v_i) + nose_from_quat(q_i) * (thrust_mag / m);
+    };
+
+    // angular acceleration
+    auto ang_accel = [&](const Vec3& w_i) {
+        Vec3 Iw = {I.x * w_i.x, I.y * w_i.y, I.z * w_i.z};
+        Vec3 gyro = w_i.cross(Iw);
+        return Vec3{
+            (net_torque.x - gyro.x) / I.x,
+            (net_torque.y - gyro.y) / I.y,
+            (net_torque.z - gyro.z) / I.z,
+        };
+    };
 
     ///////////////////////////////////////////////////////////////////////////////////////////////
     // RK4 integration                                                                           //
@@ -274,56 +320,68 @@ void Rocket::update_dynamics(double current_time) {
     ////////////////////////////////////
     // k1 terms                       //
     ////////////////////////////////////
-    // gravitional acceleration
     Vec3 k1_r = v;
-    Vec3 k1_rv = calc_gravity_accel(r);
-
-    // add engine thrust and drag
-    k1_rv += a_thrust + a_drag;
+    Vec3 k1_v = accel(r, v, q_rocket);
+    Vec3 k1_w = ang_accel(w);
+    Quat k1_q = quat_deriv(q_rocket, w);
 
     ////////////////////////////////////
     // k2 terms                       //
     ////////////////////////////////////
-    // gravitional acceleration
-    Vec3 k2_r = v + k1_rv * (dt / 2);
     Vec3 r2 = r + k1_r * (dt / 2);
-    Vec3 k2_rv = calc_gravity_accel(r2);
-
-    // add engine thrust and drag
-    k2_rv += a_thrust + a_drag;
+    Vec3 v2 = v + k1_v * (dt / 2);
+    Vec3 w2 = w + k1_w * (dt / 2);
+    Quat q2 = q_rocket + k1_q * (dt / 2);
+    Vec3 k2_r = v2;
+    Vec3 k2_v = accel(r2, v2, q2);
+    Vec3 k2_w = ang_accel(w2);
+    Quat k2_q = quat_deriv(q2, w2);
 
     ////////////////////////////////////
     // k3 terms                       //
     ////////////////////////////////////
-    // gravitional acceleration
-    Vec3 k3_r = v + k2_rv * (dt / 2);
     Vec3 r3 = r + k2_r * (dt / 2);
-    Vec3 k3_rv = calc_gravity_accel(r3);
-
-    // add engine thrust and drag
-    k3_rv += a_thrust + a_drag;
+    Vec3 v3 = v + k2_v * (dt / 2);
+    Vec3 w3 = w + k2_w * (dt / 2);
+    Quat q3 = q_rocket + k2_q * (dt / 2);
+    Vec3 k3_r = v3;
+    Vec3 k3_v = accel(r3, v3, q3);
+    Vec3 k3_w = ang_accel(w3);
+    Quat k3_q = quat_deriv(q3, w3);
 
     ////////////////////////////////////
     // k4 terms                       //
     ////////////////////////////////////
-    // gravitional acceleration
-    Vec3 k4_r = v + k3_rv * dt;
     Vec3 r4 = r + k3_r * dt;
-    Vec3 k4_rv = calc_gravity_accel(r4);
-
-    // add engine thrust and drag
-    k4_rv += a_thrust + a_drag;
+    Vec3 v4 = v + k3_v * dt;
+    Vec3 w4 = w + k3_w * dt;
+    Quat q4 = q_rocket + k3_q * dt;
+    Vec3 k4_r = v4;
+    Vec3 k4_v = accel(r4, v4, q4);
+    Vec3 k4_w = ang_accel(w4);
+    Quat k4_q = quat_deriv(q4, w4);
 
     ////////////////////////////////////
     // Rk4 formula
     ////////////////////////////////////
-    // calculate change in r, v values
     Vec3 delta_r = (k1_r + k2_r*2 + k3_r*2 + k4_r) * (dt / 6);
-    Vec3 delta_v = (k1_rv + k2_rv*2 + k3_rv*2 + k4_rv) * (dt / 6);
+    Vec3 delta_v = (k1_v + k2_v*2 + k3_v*2 + k4_v) * (dt / 6);
+    Vec3 delta_w = (k1_w + k2_w*2 + k3_w*2 + k4_w) * (dt / 6);
+    Quat delta_q = (k1_q + k2_q*2 + k3_q*2 + k4_q) * (dt / 6);
 
     // apply changes to rocket
     r += delta_r;
     v += delta_v;
+    w += delta_w;
+    q_rocket += delta_q;
+
+    // renormalize attitude quaternion
+    double qnorm = q_rocket.norm();
+    q_rocket.w /= qnorm;
+    q_rocket.x /= qnorm;
+    q_rocket.y /= qnorm;
+    q_rocket.z /= qnorm;
+
     a = delta_v / dt; // for INS
     altitude = r_norm - EARTH_RADIUS;
 
@@ -337,62 +395,6 @@ void Rocket::update_dynamics(double current_time) {
             v = surface_velocity_eci(r) + r_hat * std::max(v.dot(r_hat), 0.0); // if touching ground move iwth earth spin
         }
     }
-
-}
-
-void Rocket::update_rotation() {
-    double dt = TIME_STEP;
-
-    // net torque
-    Vec3 net_torque = {0, 0, 0};
-    
-    ////////////////////////////////////
-    // engine thrust                  //
-    ////////////////////////////////////
-    // thrust direction in body frame
-    Vec3 nose_body = {0, 0, 1};
-    Vec3 q_vec = {q_engine.x, q_engine.y, q_engine.z};
-    Vec3 t = q_vec.cross(nose_body);
-    Vec3 thrust_dir_body = nose_body + t * (2.0 * q_engine.w) + q_vec.cross(t) * 2.0;
-
-    // lever arm from the combined CM to the engine, along the body axis
-    double s_engine = active().tip_to_end_length - active().engine_distance;
-    Vec3 r_engine = {0, 0, s_engine - z_cm};
-
-    // torque in body frame
-    net_torque += r_engine.cross(thrust_dir_body * active().thrust);
-    if (rcs_active) net_torque += applied_rcs_moment;
-
-
-    ////////////////////////////////////
-    // apply torque to orientation
-    ////////////////////////////////////
-    Vec3 Iw = {I_body.x * w.x, I_body.y * w.y, I_body.z * w.z};
-    Vec3 gyro = w.cross(Iw);
-    Vec3 ang_a = {
-        (net_torque.x - gyro.x) / I_body.x,
-        (net_torque.y - gyro.y) / I_body.y,
-        (net_torque.z - gyro.z) / I_body.z,
-    };
-    w += ang_a * dt;
-
-    // modify quaternion orientation from change
-    Quat omega_q = {0.0, w.x * 0.5 * dt, w.y * 0.5 * dt, w.z * 0.5 * dt};
-    double nw = q_rocket.w*omega_q.w - q_rocket.x*omega_q.x - q_rocket.y*omega_q.y - q_rocket.z*omega_q.z;
-    double nx = q_rocket.w*omega_q.x + q_rocket.x*omega_q.w + q_rocket.y*omega_q.z - q_rocket.z*omega_q.y;
-    double ny = q_rocket.w*omega_q.y - q_rocket.x*omega_q.z + q_rocket.y*omega_q.w + q_rocket.z*omega_q.x;
-    double nz = q_rocket.w*omega_q.z + q_rocket.x*omega_q.y - q_rocket.y*omega_q.x + q_rocket.z*omega_q.w;
-    q_rocket.w += nw;
-    q_rocket.x += nx;
-    q_rocket.y += ny;
-    q_rocket.z += nz;
-
-    // renormalize
-    double qnorm = std::sqrt(q_rocket.w*q_rocket.w + q_rocket.x*q_rocket.x + q_rocket.y*q_rocket.y + q_rocket.z*q_rocket.z);
-    q_rocket.w /= qnorm;
-    q_rocket.x /= qnorm;
-    q_rocket.y /= qnorm;
-    q_rocket.z /= qnorm;
 
 }
 
