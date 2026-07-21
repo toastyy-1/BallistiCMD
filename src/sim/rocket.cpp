@@ -19,7 +19,7 @@ Rocket::~Rocket() {
  */
 RocketState Rocket::get_state() const {
     double length = 0;
-    for (int i = active_idx; i < NUM_STAGES; i++) length += props.stages[i].tip_to_end_length;
+    for (int i = active_idx; i < num_stages(); i++) length += props.stages[i].tip_to_end_length;
     double s_engine = active().tip_to_end_length - active().engine_distance;
 
     RocketState s;
@@ -41,7 +41,7 @@ RocketState Rocket::get_state() const {
 }
 
 bool Rocket::advance_stage() {
-    if (active_idx + 1 < NUM_STAGES) {
+    if (active_idx + 1 < num_stages()) {
         active_idx++;
         engine_locked = false; // fresh stage
         return true;
@@ -370,7 +370,7 @@ void Rocket::update_mass() {
     }
 
     double M = 0, M_f = 0, m_cm = 0, base = 0;
-    for (int i = active_idx; i < NUM_STAGES; i++) {
+    for (int i = active_idx; i < num_stages(); i++) {
         const Stage& st = props.stages[i];
         double m = st.m_dry + st.m_fuel;
         M += m;
@@ -385,7 +385,7 @@ void Rocket::update_mass() {
     // also adjust moment using assumption that each stage is uniform cylinder
     double R2 = props.radius * props.radius, I_trans = 0;
     base = 0;
-    for (int i = active_idx; i < NUM_STAGES; i++) {
+    for (int i = active_idx; i < num_stages(); i++) {
         const Stage& st = props.stages[i];
         double m = st.m_dry + st.m_fuel, L = st.tip_to_end_length;
         double d = (base + L - st.CoM_dist) - z_cm;

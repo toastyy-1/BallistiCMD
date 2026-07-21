@@ -2,7 +2,7 @@
 
 #include "constants.hpp"
 #include "types.hpp"
-#include <array>
+#include <vector>
 
 // number of stages on the rocket
 inline constexpr int ROCKET_NUM_STAGES = 3;
@@ -29,9 +29,5 @@ struct Stage {
 struct RocketProps {
     double radius = 0;  // hull radius for the solid-cylinder inertia model (m)
     double Cd = 0.0;    // drag coefficient
-    std::array<Stage, ROCKET_NUM_STAGES> stages = {{
-        { .id = 1 },
-        { .id = 2 },
-        { .id = 3 },
-    }};
+    std::vector<Stage> stages;
 };

@@ -85,14 +85,11 @@ FCInitState FlightController::create_target_trajectory(double lat_target, double
     if (launch_azimuth < 0) launch_azimuth += 2.0 * M_PI;
     out.launch_asimuth = launch_azimuth;
 
-    // stage 1 burn time
-    out.stage_burn_time[0] = props.stages[0].m_fuel / props.stages[0].max_mass_flow_rate();
-
-    // stage 2 burn time
-    out.stage_burn_time[1] = props.stages[1].m_fuel / props.stages[1].max_mass_flow_rate();
-
-    // stage 3 burn time
-    out.stage_burn_time[2] = props.stages[2].m_fuel / props.stages[2].max_mass_flow_rate();
+    // burn time estimate for each stage
+    out.stage_burn_time.reserve(props.stages.size());
+    for (const Stage& s : props.stages) {
+        out.stage_burn_time.push_back(s.m_fuel / s.max_mass_flow_rate());
+    }
 
     // return all our calculated stuff yay!
     return out;
@@ -244,10 +241,11 @@ void FlightController::calculate_I() {
     double R2 = props.radius * props.radius;
 
     const int first_stage = cs.stage < STAGE_1 ? STAGE_1 : cs.stage;
+    const int stage_count = static_cast<int>(props.stages.size());
 
     // mass-weighted center of mass of the remaining stages
     double M_total = 0.0, m_CoM = 0.0, base = 0.0;
-    for (int i = first_stage; i < ROCKET_NUM_STAGES; i++) {
+    for (int i = first_stage; i < stage_count; i++) {
         const Stage& st = props.stages[i];
         double m = st.m_dry + st.m_fuel;
         M_total += m;
@@ -258,7 +256,7 @@ void FlightController::calculate_I() {
     cs.z_cm = z_cm;
 
     base = 0.0;
-    for (int i = first_stage; i < ROCKET_NUM_STAGES; i++) {
+    for (int i = first_stage; i < stage_count; i++) {
         const Stage& s = props.stages[i]; // selected stage
         double M = s.m_dry + s.m_fuel;
         double L = s.tip_to_end_length;

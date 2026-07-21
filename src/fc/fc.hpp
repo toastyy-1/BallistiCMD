@@ -3,6 +3,7 @@
 #include "types.hpp"
 #include "imu.hpp"
 #include "sim/properties.hpp"
+#include <vector>
 
 class Rocket;
 
@@ -17,7 +18,7 @@ struct FCInitState {
     Vec3 v_s1_bo_T;
     Vec3 r_s1_bo_T;
 
-    double stage_burn_time[2];
+    std::vector<double> stage_burn_time;
 
     double target_tof;
 };

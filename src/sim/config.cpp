@@ -40,36 +40,39 @@ SimConfig load_sim_config(const std::string& path) {
     cfg.rocket_props.radius     = rocket["radius"].value_or(cfg.rocket_props.radius);
     cfg.rocket_props.Cd         = rocket["drag_coefficient"].value_or(cfg.rocket_props.Cd);
 
-    // must have exactly ROCKET_NUM_STAGES entries
+    // stage count comes from however many [[rocket.stage]] entries are defined
     auto stages = rocket["stage"].as_array();
-    if (!stages || stages->size() != ROCKET_NUM_STAGES) {
-        std::cerr << "config error: '" << path << "' must define exactly "
-                  << ROCKET_NUM_STAGES << " [[rocket.stage]] entries\n";
+    if (!stages || stages->empty()) {
+        std::cerr << "config error: '" << path << "' must define at least one [[rocket.stage]] entry\n";
     }
 
-    for (size_t i = 0; i < stages->size(); i++) {
-        const toml::table& st = *(*stages)[i].as_table();
-        Stage& s = cfg.rocket_props.stages[i];
+    if (stages) {
+        for (size_t i = 0; i < stages->size(); i++) {
+            const toml::table& st = *(*stages)[i].as_table();
+            Stage s{};
 
-        s.id                    = st["id"].value_or(0.0);
-        s.m_dry                 = st["dry_mass"].value_or(0.0);
-        s.m_fuel                = st["fuel_mass"].value_or(0.0);
-        s.isp                   = st["isp"].value_or(0.0);
-        s.tip_to_end_length     = st["length"].value_or(0.0);
-        s.CoM_dist              = st["com_distance"].value_or(0.0);
-        s.max_thrust            = st["max_thrust"].value_or(0.0);
-        s.engine_distance       = st["engine_distance"].value_or(0.0);
-        s.engine_gimball_range  = st["gimbal_range_deg"].value_or(0.0);
+            s.id                    = st["id"].value_or(0.0);
+            s.m_dry                 = st["dry_mass"].value_or(0.0);
+            s.m_fuel                = st["fuel_mass"].value_or(0.0);
+            s.isp                   = st["isp"].value_or(0.0);
+            s.tip_to_end_length     = st["length"].value_or(0.0);
+            s.CoM_dist              = st["com_distance"].value_or(0.0);
+            s.max_thrust            = st["max_thrust"].value_or(0.0);
+            s.engine_distance       = st["engine_distance"].value_or(0.0);
+            s.engine_gimball_range  = st["gimbal_range_deg"].value_or(0.0);
 
-        if (auto rcs = st["rcs_max_moment"].as_array(); rcs && rcs->size() == 3) {
-            s.rcs_max_capable_moment = {
-                (*rcs)[0].value_or(0.0),
-                (*rcs)[1].value_or(0.0),
-                (*rcs)[2].value_or(0.0),
-            };
-        } else if (st.contains("rcs_max_moment")) {
-            std::cerr << "config error: stage " << i
-                      << " rcs_max_moment must be a 3-element array, ignoring\n";
+            if (auto rcs = st["rcs_max_moment"].as_array(); rcs && rcs->size() == 3) {
+                s.rcs_max_capable_moment = {
+                    (*rcs)[0].value_or(0.0),
+                    (*rcs)[1].value_or(0.0),
+                    (*rcs)[2].value_or(0.0),
+                };
+            } else if (st.contains("rcs_max_moment")) {
+                std::cerr << "config error: stage " << i
+                          << " rcs_max_moment must be a 3-element array, ignoring\n";
+            }
+
+            cfg.rocket_props.stages.push_back(s);
         }
     }
 

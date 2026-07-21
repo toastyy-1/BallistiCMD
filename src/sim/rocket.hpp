@@ -36,8 +36,6 @@ class Rocket {
     ///////////////////////////////////////////////////////////////////////////////////////////////
     public:
 
-    static constexpr int NUM_STAGES = ROCKET_NUM_STAGES; // stage_1, stage_2, payload
-
     // counter to track once the rocket is dead how long it should stay existing before deleting itself
     double life_countdown = 30.0; // stays alive for n (sim) seconds before disappearing
 
@@ -125,6 +123,7 @@ class Rocket {
     // accessors for the currently active stage
     Stage& active() { return props.stages[active_idx]; }
     const Stage& active() const { return props.stages[active_idx]; }
+    int num_stages() const { return static_cast<int>(props.stages.size()); }
 
     // rocket explode button
     bool detonated = false;
