@@ -1,8 +1,8 @@
 CXX      := g++
-CXXFLAGS := -std=c++20 -Wall -Wpedantic -Isrc -pthread -O3 -flto -funroll-loops -D_USE_MATH_DEFINES
+CXXFLAGS := -std=c++20 -Wall -Wpedantic -Isrc -Ithird_party -pthread -O3 -flto -funroll-loops -D_USE_MATH_DEFINES
 
 COMMON_SRCS := src/main.cpp src/renderer/renderer.cpp src/renderer/geometry.cpp \
-               src/sim/sim.cpp src/sim/rocket.cpp src/fc/fc.cpp src/fc/stages.cpp
+               src/sim/sim.cpp src/sim/rocket.cpp src/sim/config.cpp src/fc/fc.cpp src/fc/stages.cpp
 
 RAYLIB_SRCS := src/renderer/raylib/raylib_backend.cpp src/renderer/raylib/models.cpp
 RAYLIB_ARCH := -march=native

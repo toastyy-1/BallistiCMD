@@ -4,52 +4,10 @@
 #include <cmath>
 #include <iostream>
 
-Rocket::Rocket(double origin_latitude, double origin_longitude, double target_latitude, double target_longitude) {
+Rocket::Rocket(double origin_latitude, double origin_longitude, double target_latitude, double target_longitude,
+               const RocketProps& rocket_props) {
     set_start(origin_latitude, origin_longitude, target_latitude, target_longitude);
-
-    // Minuteman III (LGM-30G)
-
-    // stage 1
-    props.stages[0] = {
-        .id = 1,
-        .m_dry = 2292.0,
-        .m_fuel = 20938.0,
-        .isp = 267.0,
-        .tip_to_end_length = 7.49,
-        .CoM_dist = 3.75,
-        .max_thrust = 903692.0,
-        .engine_distance = 7.49,
-        .engine_gimball_range = 5.0
-    };
-
-    // stage 2 - ATK SR-19 solid motor
-    props.stages[1] = {
-        .id = 2,
-        .m_dry = 795.0,
-        .m_fuel = 6237.0,
-        .isp = 288.0,
-        .tip_to_end_length = 4.12,
-        .CoM_dist = 2.06,
-        .max_thrust = 270421.0,
-        .engine_distance = 4.12,
-        .engine_gimball_range = 5.0
-    };
-
-    // stage 3
-    props.stages[2] = {
-        .id = 3,
-        .m_dry = 1500.0,
-        .m_fuel = 3306.0,
-        .isp = 285.0,
-        .tip_to_end_length = 6.59,
-        .CoM_dist = 3.3,
-        .max_thrust = 156070.0,
-        .engine_distance = 6.59,
-        .engine_gimball_range = 4.0,
-        .rcs_max_capable_moment = { 100.0, 100.0, 100.0 }
-    };
-
-    props.radius = 0.835;
+    props = rocket_props;
 }
 
 Rocket::~Rocket() {

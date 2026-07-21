@@ -1,12 +1,12 @@
 #include "sim/sim.hpp"
 #include "sim/rocket.hpp"
+#include "sim/config.hpp"
 #include "types.hpp"
 #include <cmath>
 #include <iostream>
 #include <thread>
 #include <chrono>
 #include "constants.hpp"
-#include <random>
 #include <fstream>
 
 
@@ -29,24 +29,11 @@ namespace sim {
         ///////////////////////////////////////////////////////////////////////////////////////////////
         // rocket placement process                                                                  //
         ///////////////////////////////////////////////////////////////////////////////////////////////
-        const double origin_center_lat = 48.209;
-        const double origin_center_long = -101.406;
+        SimConfig config = load_sim_config("config/sim.toml");
 
-        const double target_center_lat = 53.9;
-        const double target_center_long = 43.3;
-
-        std::mt19937 rng(1201);
-        std::uniform_real_distribution<double> ro(-0.2, 0.2);
-        std::uniform_real_distribution<double> rt(-0.2, 0.2);
-
-        for (int i = 0; i < 1; i++) {
-            double start_lat_gen = origin_center_lat * (1 + ro(rng));
-            double start_long_gen = origin_center_long * (1 + ro(rng));
-
-            double target_lat_gen = target_center_lat;
-            double target_long_gen = target_center_long;
-
-            Rocket new_rocket{start_lat_gen, start_long_gen, target_lat_gen, target_long_gen};
+        for (const LaunchTarget& launch : config.launches) {
+            Rocket new_rocket{launch.origin_lat, launch.origin_lon, launch.target_lat, launch.target_lon,
+                               config.rocket_props};
             rocket_list.push_back(new_rocket);
         }
 

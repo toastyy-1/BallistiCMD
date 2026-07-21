@@ -42,7 +42,8 @@ class Rocket {
     double life_countdown = 30.0; // stays alive for n (sim) seconds before disappearing
 
     // setup
-    Rocket(double origin_latitude, double origin_longitude, double target_latitude, double target_longitude);
+    Rocket(double origin_latitude, double origin_longitude, double target_latitude, double target_longitude,
+           const RocketProps& props);
     ~Rocket();
 
     // getters:

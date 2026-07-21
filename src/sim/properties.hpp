@@ -1,6 +1,7 @@
 #pragma once
 
 #include "constants.hpp"
+#include "types.hpp"
 #include <array>
 
 // number of stages on the rocket
