@@ -1,80 +1,97 @@
 #include "sim/config.hpp"
-#include "tomlplusplus/toml.hpp"
+#include "fkYAML/node.hpp"
+#include <fstream>
 #include <iostream>
 #include <stdexcept>
 
+template <typename T>
+static T value_or(const fkyaml::node& n, const char* key, T fallback) {
+    if (n.is_mapping() && n.contains(key)) {
+        try {
+            return n.at(key).get_value<T>();
+        } catch (...) {
+        }
+    }
+    return fallback;
+}
+
 SimConfig load_sim_config(const std::string& path) {
-    // parse the toml file
-    toml::table tbl;
+    // parse the yaml file
+    fkyaml::node root;
     try {
-        tbl = toml::parse_file(path);
-    } catch (const toml::parse_error& err) {
-        std::cerr << "config error: could not parse '" << path << "': " << err.description() << "\n";
+        std::ifstream file(path);
+        root = fkyaml::node::deserialize(file);
+    } catch (const fkyaml::exception& err) {
+        std::cerr << "config error: could not parse '" << path << "': " << err.what() << "\n";
     }
 
     SimConfig cfg;
 
-    cfg.time_step = tbl["time_step"].value_or(cfg.time_step);
-    cfg.step_delay = tbl["step_delay"].value_or(cfg.step_delay);
+    cfg.time_step = value_or(root, "time_step", cfg.time_step);
+    cfg.step_delay = value_or(root, "step_delay", cfg.step_delay);
 
-    // one launch entry per rocket, each corresponding to its own origin and target
-    auto launches = tbl["launch"].as_array();
-    if (launches) {
-        for (size_t i = 0; i < launches->size(); i++) {
-            const toml::table& l = *(*launches)[i].as_table();
-            LaunchTarget launch;
+    // one entry per rocket
+    if (root.is_mapping() && root.contains("rockets") && root["rockets"].is_sequence()) {
+        size_t ri = 0;
+        for (const auto& rn : root["rockets"]) {
+            RocketEntry rocket;
 
-            launch.origin_lat = l["origin_lat"].value_or(0.0);
-            launch.origin_lon = l["origin_lon"].value_or(0.0);
-            launch.target_lat = l["target_lat"].value_or(0.0);
-            launch.target_lon = l["target_lon"].value_or(0.0);
-            cfg.launches.push_back(launch);
-        }
-    }
+            rocket.origin_lat = value_or(rn, "origin_lat", 0.0);
+            rocket.origin_lon = value_or(rn, "origin_lon", 0.0);
+            rocket.target_lat = value_or(rn, "target_lat", 0.0);
+            rocket.target_lon = value_or(rn, "target_lon", 0.0);
 
-    if (cfg.launches.empty()) {
-        std::cerr << "config error: '" << path << "' must define at least one [[launch]] entry\n";
-    }
+            rocket.props.radius = value_or(rn, "radius", rocket.props.radius);
+            rocket.props.Cd     = value_or(rn, "drag_coefficient", rocket.props.Cd);
 
-    // rocket body properties
-    auto rocket = tbl["rocket"];
-    cfg.rocket_props.radius     = rocket["radius"].value_or(cfg.rocket_props.radius);
-    cfg.rocket_props.Cd         = rocket["drag_coefficient"].value_or(cfg.rocket_props.Cd);
-
-    // stage count comes from however many [[rocket.stage]] entries are defined
-    auto stages = rocket["stage"].as_array();
-    if (!stages || stages->empty()) {
-        std::cerr << "config error: '" << path << "' must define at least one [[rocket.stage]] entry\n";
-    }
-
-    if (stages) {
-        for (size_t i = 0; i < stages->size(); i++) {
-            const toml::table& st = *(*stages)[i].as_table();
-            Stage s{};
-
-            s.id                    = st["id"].value_or(0.0);
-            s.m_dry                 = st["dry_mass"].value_or(0.0);
-            s.m_fuel                = st["fuel_mass"].value_or(0.0);
-            s.isp                   = st["isp"].value_or(0.0);
-            s.tip_to_end_length     = st["length"].value_or(0.0);
-            s.CoM_dist              = st["com_distance"].value_or(0.0);
-            s.max_thrust            = st["max_thrust"].value_or(0.0);
-            s.engine_distance       = st["engine_distance"].value_or(0.0);
-            s.engine_gimball_range  = st["gimbal_range_deg"].value_or(0.0);
-
-            if (auto rcs = st["rcs_max_moment"].as_array(); rcs && rcs->size() == 3) {
-                s.rcs_max_capable_moment = {
-                    (*rcs)[0].value_or(0.0),
-                    (*rcs)[1].value_or(0.0),
-                    (*rcs)[2].value_or(0.0),
-                };
-            } else if (st.contains("rcs_max_moment")) {
-                std::cerr << "config error: stage " << i
-                          << " rcs_max_moment must be a 3-element array, ignoring\n";
+            // stage count comes from however many stage entries this rocket defines
+            bool has_stages = rn.is_mapping() && rn.contains("stage") && rn["stage"].is_sequence();
+            if (!has_stages || rn["stage"].empty()) {
+                std::cerr << "config error: '" << path << "' rocket " << ri
+                          << " must define at least one stage entry\n";
             }
 
-            cfg.rocket_props.stages.push_back(s);
+            if (has_stages) {
+                size_t si = 0;
+                for (const auto& st : rn["stage"]) {
+                    Stage s{};
+
+                    s.id                    = value_or(st, "id", 0.0);
+                    s.m_dry                 = value_or(st, "dry_mass", 0.0);
+                    s.m_fuel                = value_or(st, "fuel_mass", 0.0);
+                    s.isp                   = value_or(st, "isp", 0.0);
+                    s.tip_to_end_length     = value_or(st, "length", 0.0);
+                    s.CoM_dist              = value_or(st, "com_distance", 0.0);
+                    s.max_thrust            = value_or(st, "max_thrust", 0.0);
+                    s.engine_distance       = value_or(st, "engine_distance", 0.0);
+                    s.engine_gimball_range  = value_or(st, "gimbal_range_deg", 0.0);
+
+                    if (st.is_mapping() && st.contains("rcs_max_moment")) {
+                        const fkyaml::node& rcs = st["rcs_max_moment"];
+                        if (rcs.is_sequence() && rcs.size() == 3) {
+                            s.rcs_max_capable_moment = {
+                                rcs[0].get_value<double>(),
+                                rcs[1].get_value<double>(),
+                                rcs[2].get_value<double>(),
+                            };
+                        } else {
+                            std::cerr << "config error: rocket " << ri << " stage " << si
+                                      << " rcs_max_moment must be a 3-element array, ignoring\n";
+                        }
+                    }
+
+                    rocket.props.stages.push_back(s);
+                    si++;
+                }
+            }
+
+            cfg.rockets.push_back(rocket);
+            ri++;
         }
+    }
+
+    if (cfg.rockets.empty()) {
+        std::cerr << "config error: '" << path << "' must define at least one rocket entry\n";
     }
 
     return cfg;

@@ -29,12 +29,12 @@ namespace sim {
         ///////////////////////////////////////////////////////////////////////////////////////////////
         // rocket placement process                                                                  //
         ///////////////////////////////////////////////////////////////////////////////////////////////
-        SimConfig config = load_sim_config("config/sim.toml");
+        SimConfig config = load_sim_config("config/sim.yaml");
         TIME_STEP = config.time_step;
 
-        for (const LaunchTarget& launch : config.launches) {
-            Rocket new_rocket{launch.origin_lat, launch.origin_lon, launch.target_lat, launch.target_lon,
-                               config.rocket_props};
+        for (const RocketEntry& rocket : config.rockets) {
+            Rocket new_rocket{rocket.origin_lat, rocket.origin_lon, rocket.target_lat, rocket.target_lon,
+                               rocket.props};
             rocket_list.push_back(new_rocket);
         }
 
